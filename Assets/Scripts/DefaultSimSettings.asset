@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45a3231d4e7b4a47a4e8f0d3ed2565ca, type: 3}
+  m_Name: DefaultSimSettings
+  m_EditorClassIdentifier: 
+  mode: 1
+  gravitationalConstant: 0.00029592
+  timeScale: 10
+  subSteps: 4
+  softeningFactor: 0.000000001
+  baseDistance: 1.5
+  distanceMultiplier: 2
+  compressionPower: 0.45
+  showOrbits: 1
+  visualScaleMultiplier: 1
+  trailDuration: 30
