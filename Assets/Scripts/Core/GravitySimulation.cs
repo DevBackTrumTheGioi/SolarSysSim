@@ -54,8 +54,11 @@ public class GravitySimulation : MonoBehaviour
     // Pre-allocated arrays to avoid GC
     private DoubleVector3[] newAccelerations;
 
+    private SimulationCamera simCamera;
+
     void Start()
     {
+        simCamera = FindObjectOfType<SimulationCamera>();
         InitializeSimulation();
     }
 
@@ -118,9 +121,9 @@ public class GravitySimulation : MonoBehaviour
     }
 
     // === FIX 1 & 2: Giới hạn dt tối đa mỗi sub-step để tránh energy drift và orbit thẳng ===
-    // Khi timeScale lớn, tự động tăng subSteps để dt/step luôn đủ nhỏ.
-    // 0.5 days/step là ngưỡng an toàn cho quỹ đạo hành tinh trong Hệ Mặt Trời.
-    private const double MAX_DT_PER_STEP = 0.5; // days
+    // Giảm từ 0.5 xuống 0.05 để đảm bảo ở tốc độ rất cao (125), các hành tinh như Mercury
+    // không bị nhảy bước quá lớn trong tích phân vật lý gây ra rung lắc quỹ đạo.
+    private const double MAX_DT_PER_STEP = 0.05; // days
 
     void FixedUpdate()
     {
@@ -142,15 +145,56 @@ public class GravitySimulation : MonoBehaviour
             VelocityVerletStep(subDt);
         }
 
+        // === SUN DRIFT: Dịch TẤT CẢ bodies lên trên trục Y cùng tốc độ ===
+        // Mô phỏng hệ Mặt Trời di chuyển trong thiên hà.
+        // Vì tất cả dịch cùng vector → khoảng cách tương đối KHÔNG ĐỔI → gravity KHÔNG bị ảnh hưởng.
+        // Trail ghi world position → tự tạo hình xoắn ốc 3D đẹp mắt.
+        if (settings.enableSunDrift && settings.sunDriftSpeed > 0f)
+        {
+            // Áp dụng Time Scale multiplier (totalDt = Time.fixedDeltaTime * timeScale)
+            double driftY = settings.sunDriftSpeed * totalDt;
+            DoubleVector3 drift = new DoubleVector3(0, driftY, 0);
+            for (int i = 0; i < bodyCount; i++)
+            {
+                bodies[i].position = bodies[i].position + drift;
+            }
+        }
+
         // Update visual positions + trail
         DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
+
+        // === Sun phải update visual TRƯỚC để các hành tinh khác lấy sunVisualPos đúng ===
+        // Sun visual position = physics position trực tiếp (không relative vì nó là gốc)
+        if (sunBody != null)
+        {
+            if (settings.mode == SimulationSettings.SimMode.GameFriendly)
+            {
+                // GameFriendly: Sun ở gốc XZ=0, nhưng giữ Y từ drift
+                sunBody.transform.position = new Vector3(0f, (float)sunPhysicsPos.y, 0f);
+            }
+            else
+            {
+                sunBody.transform.position = sunPhysicsPos.ToVector3();
+            }
+        }
+
+        Transform focusTarget = simCamera != null ? simCamera.target : null;
         Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
+        
         for (int i = 0; i < bodyCount; i++)
         {
+            // Chỉ cập nhật Visual rotation khi tốc độ thời gian thật chậm (timeScale < 1)
+            // để tránh người xem bị chóng mặt khi mô phỏng ở tốc độ cao
+            if (settings.timeScale < 1f)
+            {
+                bodies[i].UpdateRotation(settings.timeScale);
+            }
+
+            // Sun đã update ở trên, skip update position again
+            if (bodies[i] == sunBody) continue;
+
             bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
-            // Sun không cần trail
-            if (bodies[i] != sunBody)
-                bodies[i].AddOrbitPoint(bodies[i].transform.position);
+            bodies[i].AddOrbitPoint(bodies[i].transform.position);
         }
 
 
@@ -315,11 +359,19 @@ public class GravitySimulation : MonoBehaviour
         // Recompute initial accelerations
         ComputeAllAccelerations(bodies);
         DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
+        if (sunBody != null)
+        {
+            if (settings.mode == SimulationSettings.SimMode.GameFriendly)
+                sunBody.transform.position = new Vector3(0f, (float)sunPhysicsPos.y, 0f);
+            else
+                sunBody.transform.position = sunPhysicsPos.ToVector3();
+        }
         Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
         for (int i = 0; i < bodyCount; i++)
         {
             bodies[i].acceleration = newAccelerations[i];
-            bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
+            if (bodies[i] != sunBody)
+                bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
         }
     }
 }

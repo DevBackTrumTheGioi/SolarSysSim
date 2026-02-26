@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 using System;
 
 /// <summary>
@@ -88,6 +88,16 @@ public class SimulationSettings : ScriptableObject
 
     [Tooltip("Chiều dài trail (số giây real-time)")]
     public float trailDuration = 30f;
+
+    // ==================== SUN DRIFT (mô phỏng Sun di chuyển trong thiên hà) ====================
+
+    [Header("=== SUN DRIFT ===")]
+    [Tooltip("Bật mô phỏng Sun bay lên trên (vuông góc mặt phẳng quỹ đạo)")]
+    public bool enableSunDrift = true;
+
+    [Tooltip("Tốc độ Sun drift (Unity units/giây real-time). Giá trị nhỏ = chậm rãi, đẹp mắt.")]
+    [Range(0f, 0.2f)]
+    public float sunDriftSpeed = 0.1f;
 
     // ==================== METHODS ====================
 

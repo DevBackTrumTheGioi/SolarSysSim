@@ -2,33 +2,111 @@
 
 /// <summary>
 /// Script khởi tạo toàn bộ Hệ Mặt Trời từ PlanetData.
-/// 
-/// === CÁCH SỬ DỤNG ===
-/// 1. Tạo Empty GameObject "SolarSystem"
-/// 2. Gắn SolarSystemBuilder component
-/// 3. Gắn GravitySimulation component 
-/// 4. Tạo SimulationSettings asset (Create > Solar System > Simulation Settings)
-/// 5. Kéo settings vào cả 2 components
-/// 6. Nhấn Play → Hệ Mặt Trời tự tạo và bắt đầu chạy!
-///
-/// === PHYSICS vs VISUAL ===
-/// - initialPositionV3 và initialVelocityV3 → PHYSICS (khoảng cách thật, AU)
-/// - transform.position → VISUAL (khoảng cách nén, Unity units)
-/// - GravitySimulation tính gravity trên physics positions → quỹ đạo ĐÚNG
-/// - CelestialBody.UpdateVisualPosition() map physics → visual mỗi frame
+/// Dùng prefab từ gói "Planets of the Solar System 3D".
+/// Tạo Directional Light phát từ Mặt Trời.
+/// Set background đen + Skybox đen.
 /// </summary>
 public class SolarSystemBuilder : MonoBehaviour
 {
     [Header("=== SETTINGS ===")]
     public SimulationSettings settings;
 
+    [Header("=== PREFABS (kéo prefab từ Planets of the Solar System 3D/Prefabs vào đây) ===")]
+    [Tooltip("Kéo prefab hành tinh vào đây. Script sẽ match theo tên (Sun, Mercury, Venus, ...)")]
+    public GameObject[] planetPrefabs;
+
     [Header("=== OPTIONS ===")]
     [Tooltip("Hướng 'lên' của mặt phẳng quỹ đạo. Mặc định: Y-up (XZ plane).")]
     public bool orbitalPlaneXZ = true;
 
+    // Directional Light sẽ follow Sun mỗi frame
+    private Light sunLight;
+    private Transform sunTransform;
+
     void Awake()
     {
+        SetupBackground();
         BuildSolarSystem();
+        CreateSunLight();
+    }
+
+    void LateUpdate()
+    {
+        // Directional Light luôn follow Sun position
+        if (sunLight != null && sunTransform != null)
+        {
+            sunLight.transform.position = sunTransform.position;
+        }
+    }
+
+    /// <summary>
+    /// Set background đen: Camera + Skybox.
+    /// </summary>
+    private void SetupBackground()
+    {
+        // Camera background đen
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = Color.black;
+        }
+
+        // Tắt skybox → background = camera color = đen (vũ trụ)
+        RenderSettings.skybox = null;
+
+        // Ambient light rất tối — không gian vũ trụ
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.05f, 0.05f, 0.08f);
+    }
+
+    /// <summary>
+    /// Tìm prefab trong planetPrefabs array theo tên (case-insensitive contains).
+    /// VD: data.name = "Sun" → match prefab "Sun", "Sun Sphere", etc.
+    /// </summary>
+    private GameObject FindPrefab(string bodyName)
+    {
+        if (planetPrefabs == null || planetPrefabs.Length == 0) return null;
+
+        string lowerName = bodyName.ToLower();
+        foreach (var prefab in planetPrefabs)
+        {
+            if (prefab != null && prefab.name.ToLower().Contains(lowerName))
+                return prefab;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Tạo Directional Light phát từ vị trí Mặt Trời.
+    /// Ánh sáng chiếu ra mọi hướng (mô phỏng ánh sáng Mặt Trời).
+    /// </summary>
+    private void CreateSunLight()
+    {
+        // Xóa Directional Light mặc định nếu có
+        Light[] existingLights = FindObjectsOfType<Light>();
+        foreach (var l in existingLights)
+        {
+            if (l.type == LightType.Directional && l.gameObject != this.gameObject)
+            {
+                Destroy(l.gameObject);
+            }
+        }
+
+        // Tạo Point Light ở vị trí Sun — chiếu sáng tất cả hành tinh xung quanh
+        GameObject lightObj = new GameObject("Sun_PointLight");
+        lightObj.transform.parent = this.transform;
+        Light pointLight = lightObj.AddComponent<Light>();
+        pointLight.type = LightType.Point;
+        pointLight.color = new Color(1f, 0.95f, 0.8f); // Ánh sáng ấm của Mặt Trời
+        pointLight.intensity = 2f;
+        pointLight.range = 100f; // Đủ xa để chiếu tới Neptune
+        pointLight.shadows = LightShadows.None; // Tắt shadow cho performance
+
+        if (sunTransform != null)
+            lightObj.transform.position = sunTransform.position;
+
+        sunLight = pointLight;
     }
 
     /// <summary>
@@ -45,53 +123,59 @@ public class SolarSystemBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Tạo một thiên thể từ BodyInfo.
-    /// 
-    /// === KIẾN TRÚC QUAN TRỌNG: PHYSICS ≠ VISUAL ===
-    /// 
-    /// CelestialBody lưu 2 loại data:
-    ///   initialPositionV3 = vị trí PHYSICS (AU thật) → dùng để tính gravity
-    ///   initialVelocityV3 = vận tốc PHYSICS (AU/day thật) → dùng cho integration
-    ///   transform.position = vị trí VISUAL (Unity units, nén) → chỉ để render
-    ///
-    /// Physics chạy ở khoảng cách thật:
-    ///   Earth position = (1.0, 0, 0) AU → gravity đúng
-    ///   Earth velocity = (0, 0, 0.01720) AU/day → quỹ đạo tròn
-    ///
-    /// Visual hiển thị ở khoảng cách nén:
-    ///   Earth visual position = (3.5, 0, 0) Unity units → nhìn đẹp
-    ///
-    /// → Quỹ đạo vẫn CHÍNH XÁC vì gravity dùng physics position!
-    /// → Visual chỉ "zoom" position để dễ nhìn, không ảnh hưởng physics.
+    /// Tạo một thiên thể: Instantiate prefab từ gói, fallback về Sphere nếu không tìm thấy.
     /// </summary>
     private void CreateBody(PlanetData.BodyInfo data)
     {
-        // Tạo Sphere
-        GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        obj.name = data.name;
-        obj.transform.parent = this.transform;
+        GameObject obj = null;
 
-        // Visual scale (exaggerated - actual planet sizes are invisible at AU scale)
+        // === Tìm prefab trong array theo tên ===
+        GameObject prefab = FindPrefab(data.name);
+        if (prefab != null)
+        {
+            obj = Instantiate(prefab, this.transform);
+            obj.name = data.name;
+
+            // Xóa các script có sẵn trong prefab (tránh xung đột với simulation)
+            foreach (var s in obj.GetComponentsInChildren<MonoBehaviour>())
+                Destroy(s);
+
+            Debug.Log($"[SolarSystemBuilder] Loaded prefab for {data.name}");
+        }
+
+        // === Fallback: tạo Sphere primitive nếu không có prefab ===
+        if (obj == null)
+        {
+            obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            obj.name = data.name;
+            obj.transform.parent = this.transform;
+
+            // Material fallback
+            Renderer bodyRenderer = obj.GetComponent<Renderer>();
+            if (bodyRenderer != null)
+            {
+                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                mat.color = data.color;
+
+                if (data.name == "Sun")
+                {
+                    mat.EnableKeyword("_EMISSION");
+                    mat.SetColor("_EmissionColor", data.color * 2f);
+                }
+
+                bodyRenderer.material = mat;
+            }
+
+            Debug.LogWarning($"[SolarSystemBuilder] Prefab not found for {data.name}, using sphere fallback.");
+        }
+
+        // Visual scale
         float scale = data.visualScale * (settings != null ? settings.visualScaleMultiplier : 1f);
         obj.transform.localScale = Vector3.one * scale;
 
-        // Màu sắc
-        Renderer bodyRenderer = obj.GetComponent<Renderer>();
-        if (bodyRenderer != null)
-        {
-            // Tạo material mới để mỗi hành tinh có màu riêng
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = data.color;
-
-            // Sun phát sáng (emission)
-            if (data.name == "Sun")
-            {
-                mat.EnableKeyword("_EMISSION");
-                mat.SetColor("_EmissionColor", data.color * 2f);
-            }
-
-            bodyRenderer.material = mat;
-        }
+        // Xóa Collider (không cần physics collision trong simulation)
+        Collider col = obj.GetComponent<Collider>();
+        if (col != null) Destroy(col);
 
         // Gắn CelestialBody component
         CelestialBody body = obj.AddComponent<CelestialBody>();
@@ -100,34 +184,38 @@ public class SolarSystemBuilder : MonoBehaviour
         body.bodyRadius = data.radius;
         body.orbitColor = data.color;
 
+        // Lưu reference Sun
+        if (data.name == "Sun")
+        {
+            sunTransform = obj.transform;
+        }
+
         // === PHYSICS POSITIONS (khoảng cách THẬT - AU) ===
-        // Đây là giá trị dùng để tính gravity — KHÔNG ĐƯỢC NÉN!
         float dist = (float)data.distanceFromSun;
+        
+        // Tạo góc ngẫu nhiên trên quỹ đạo (thử dùng seed tự do, chỉ áp dụng nếu không phải Mặt Trời)
+        float randomAngle = 0f;
+        if (data.name != "Sun")
+        {
+            randomAngle = Random.Range(0f, 2f * Mathf.PI);
+        }
 
         if (orbitalPlaneXZ)
         {
-            // Quỹ đạo trên mặt phẳng XZ (Y = up)
-            body.initialPositionV3 = new Vector3(dist, 0f, 0f);
-
-            // Vận tốc vuông góc với hướng radial → quỹ đạo tròn
-            body.initialVelocityV3 = new Vector3(0f, 0f, (float)data.orbitalVelocity);
+            body.initialPositionV3 = new Vector3(dist * Mathf.Cos(randomAngle), 0f, dist * Mathf.Sin(randomAngle));
+            body.initialVelocityV3 = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), 0f, (float)data.orbitalVelocity * Mathf.Cos(randomAngle));
         }
         else
         {
-            // Quỹ đạo trên mặt phẳng XY (Z = up)
-            body.initialPositionV3 = new Vector3(dist, 0f, 0f);
-            body.initialVelocityV3 = new Vector3(0f, (float)data.orbitalVelocity, 0f);
+            body.initialPositionV3 = new Vector3(dist * Mathf.Cos(randomAngle), dist * Mathf.Sin(randomAngle), 0f);
+            body.initialVelocityV3 = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), (float)data.orbitalVelocity * Mathf.Cos(randomAngle), 0f);
         }
 
         // === VISUAL POSITION (khoảng cách NÉN - Unity units) ===
-        // Chỉ ảnh hưởng render ban đầu, GravitySimulation sẽ cập nhật mỗi frame
         if (settings != null)
         {
             float visualDist = settings.RealToVisualDistance(data.distanceFromSun);
-            if (orbitalPlaneXZ)
-                obj.transform.position = new Vector3(visualDist, 0f, 0f);
-            else
-                obj.transform.position = new Vector3(visualDist, 0f, 0f);
+            obj.transform.position = new Vector3(visualDist, 0f, 0f);
         }
         else
         {
@@ -140,7 +228,6 @@ public class SolarSystemBuilder : MonoBehaviour
     /// </summary>
     public void ClearAll()
     {
-        // Destroy tất cả child objects
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             DestroyImmediate(transform.GetChild(i).gameObject);

@@ -35,12 +35,18 @@ public class CelestialBody : MonoBehaviour
     [Tooltip("Vị trí ban đầu (AU). Override transform.position khi simulation bắt đầu.")]
     public Vector3 initialPositionV3 = Vector3.zero;
 
-    [Header("=== VISUAL ===")]
     [Tooltip("Màu quỹ đạo")]
     public Color orbitColor = Color.white;
 
     [Tooltip("Tên hiển thị")]
     public string bodyName = "Unknown";
+
+    [Header("=== ROTATION ===")]
+    [Tooltip("Độ nghiêng của trục tự quay so với mặt phẳng quỹ đạo (độ)")]
+    public float axialTilt = 0f;
+
+    [Tooltip("Thời gian tự quay quanh trục (tính bằng Số ngày Trái Đất/vòng)")]
+    public float rotationPeriod = 1f;
 
     // ==================== RUNTIME STATE (double precision) ====================
     // Physics state - khoảng cách THỰC (AU)
@@ -72,6 +78,24 @@ public class CelestialBody : MonoBehaviour
         acceleration = DoubleVector3.zero;
 
         transform.position = position.ToVector3();
+
+        // Áp dụng độ nghiêng trục ban đầu (Nghiêng quanh trục X của thế giới)
+        transform.rotation = Quaternion.Euler(axialTilt, 0, 0);
+    }
+
+    /// <summary>
+    /// Xoay hành tinh quang trục Y Local mỗi frame dựa theo rotationPeriod và TimeScale
+    /// </summary>
+    public void UpdateRotation(float timeScale)
+    {
+        if (rotationPeriod == 0) return; // Tránh lỗi chia cho 0
+
+        // 1 day in sim = 360 degrees rotation for Earth. 
+        // Vận tốc góc = (360 độ / rotationPeriod) * timeScale * deltaTime
+        float rotationSpeed = (360f / rotationPeriod) * timeScale;
+        
+        // Quanh quanh trục Y cục bộ (đã bị nghiêng bởi axialTilt)
+        transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime, Space.Self);
     }
 
     /// <summary>
@@ -102,8 +126,6 @@ public class CelestialBody : MonoBehaviour
     /// </summary>
     public void SetupTrail(SimulationSettings settings)
     {
-        if (!settings.showOrbits) return;
-
         // Xóa TrailRenderer cũ nếu có
         TrailRenderer oldTrail = gameObject.GetComponent<TrailRenderer>();
         if (oldTrail != null) DestroyImmediate(oldTrail);
@@ -111,6 +133,8 @@ public class CelestialBody : MonoBehaviour
         orbitLine = gameObject.GetComponent<LineRenderer>();
         if (orbitLine == null)
             orbitLine = gameObject.AddComponent<LineRenderer>();
+
+        orbitLine.enabled = settings.showOrbits;
 
         orbitLine.material = new Material(Shader.Find("Sprites/Default"));
         orbitLine.startWidth = 0.04f;

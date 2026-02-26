@@ -15,12 +15,19 @@ public class SimulationCamera : MonoBehaviour
     [Header("=== TARGET ===")]
     [Tooltip("Thiên thể đang focus. Null = nhìn tổng quan.")]
     public Transform target;
+    
+    [Tooltip("Kéo SimulationSettings vào đây để tự chỉnh tốc độ khi focus.")]
+    public SimulationSettings settings;
 
     [Header("=== ZOOM ===")]
     public float zoomSpeed = 5f;
     public float minDistance = 0.1f;
     public float maxDistance = 200f;
     public float currentDistance = 20f;
+    public float targetDistance = 20f; // Dùng để lerp zoom mượt mà
+
+    [Header("=== MOVEMENT ===")]
+    public float moveSpeed = 30f;
 
     [Header("=== ROTATION ===")]
     public float rotationSpeed = 3f;
@@ -40,6 +47,7 @@ public class SimulationCamera : MonoBehaviour
 
         // Vị trí ban đầu: nhìn từ trên xuống, zoom vừa đủ thấy toàn bộ hệ
         currentDistance = 20f;
+        targetDistance = 20f;
         rotationX = 60f;
     }
 
@@ -56,8 +64,29 @@ public class SimulationCamera : MonoBehaviour
         if (Mathf.Abs(scroll) > 0.001f)
         {
             // Logarithmic zoom - feels more natural at different scales
-            currentDistance *= (1f - scroll * zoomSpeed);
-            currentDistance = Mathf.Clamp(currentDistance, minDistance, maxDistance);
+            targetDistance *= (1f - scroll * zoomSpeed);
+            targetDistance = Mathf.Clamp(targetDistance, minDistance, maxDistance);
+        }
+        
+        // Cập nhật currentDistance mượt mà
+        currentDistance = Mathf.Lerp(currentDistance, targetDistance, Time.deltaTime * smoothSpeed);
+
+        // === WASD / ARROWS MOVEMENT ===
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
+        if (h != 0 || v != 0)
+        {
+            // Bỏ target để di chuyển tự do
+            target = null;
+            
+            // Tính hướng chạy ngang (phẳng) trên the XZ plane theo camera view
+            Vector3 forward = transform.forward;
+            Vector3 right = transform.right;
+            forward.y = 0; right.y = 0;
+            if (forward.sqrMagnitude > 0) forward.Normalize();
+            if (right.sqrMagnitude > 0) right.Normalize();
+            
+            targetPosition += (forward * v + right * h) * moveSpeed * Time.deltaTime;
         }
 
         // === ROTATE: Right Mouse Button + Drag ===
@@ -83,8 +112,19 @@ public class SimulationCamera : MonoBehaviour
         // === RESET: Space ===
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            target = null;
-            currentDistance = 20f;
+            if (allBodies != null)
+            {
+                foreach (var body in allBodies)
+                {
+                    if (body.bodyName == "Sun")
+                    {
+                        target = body.transform;
+                        break;
+                    }
+                }
+            }
+            if (settings != null) settings.timeScale = 40f;
+            targetDistance = 60f;
             rotationX = 60f;
             rotationY = 0f;
         }
@@ -99,7 +139,7 @@ public class SimulationCamera : MonoBehaviour
                 CelestialBody body = hit.collider.GetComponent<CelestialBody>();
                 if (body != null)
                 {
-                    target = body.transform;
+                    FocusOnBody(body);
                 }
             }
         }
@@ -119,17 +159,39 @@ public class SimulationCamera : MonoBehaviour
         {
             if (body.bodyName == names[index])
             {
-                target = body.transform;
+                FocusOnBody(body);
                 return;
             }
         }
     }
 
+    void FocusOnBody(CelestialBody body)
+    {
+        target = body.transform;
+        if (settings != null) settings.timeScale = 0.05f; // Giảm xuống 0.05 days/sec
+        
+        // Auto-zoom lại gần
+        float baseScale = 1f;
+        // Vì Data lưu visualScale ở PlanetData, nhưng ta có thể ước lượng bằng localScale
+        baseScale = body.transform.localScale.x; 
+        
+        // Tùy mặt trời hoặc hành tinh mà góc nhìn khác nhau
+        float zoomMultiplier = (body.bodyName == "Sun") ? 4f : 3f;
+        targetDistance = baseScale * zoomMultiplier;
+        targetDistance = Mathf.Clamp(targetDistance, minDistance, maxDistance);
+    }
+
     void UpdateCameraPosition()
     {
         // Target position: follow selected body or origin
-        Vector3 desiredTarget = target != null ? target.position : Vector3.zero;
-        targetPosition = Vector3.Lerp(targetPosition, desiredTarget, Time.deltaTime * smoothSpeed);
+        if (target != null)
+        {
+            targetPosition = Vector3.Lerp(targetPosition, target.position, Time.deltaTime * smoothSpeed);
+        }
+        else
+        {
+            // Khi target == null, targetPosition do WASD điều khiển trực tiếp
+        }
 
         // Tính vị trí camera từ rotation và distance
         Quaternion rotation = Quaternion.Euler(rotationX, rotationY, 0);

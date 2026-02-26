@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mode: 1
   gravitationalConstant: 0.00029592
-  timeScale: 1000
+  timeScale: 62.5
   subSteps: 5
   softeningFactor: 0.000000001
   baseDistance: 1.5
@@ -23,3 +23,5 @@ MonoBehaviour:
   showOrbits: 1
   visualScaleMultiplier: 1
   trailDuration: 30
+  enableSunDrift: 1
+  sunDriftSpeed: 1.2

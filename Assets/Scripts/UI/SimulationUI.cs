@@ -11,64 +11,100 @@ public class SimulationUI : MonoBehaviour
     public SimulationCamera simCamera;
 
     private bool showHelp = true;
+    private Texture2D bgTexture;
 
     void OnGUI()
     {
+        if (bgTexture == null)
+        {
+            bgTexture = new Texture2D(1, 1);
+            bgTexture.SetPixel(0, 0, new Color(0.15f, 0.15f, 0.15f, 0.85f));
+            bgTexture.Apply();
+        }
+
         // Style setup
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
         {
             fontSize = 16,
             fontStyle = FontStyle.Bold
         };
-
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box);
+        boxStyle.normal.background = bgTexture;
+        
         // === SIMULATION INFO (top-left) ===
-        GUILayout.BeginArea(new Rect(10, 10, 320, 250));
+        GUILayout.BeginArea(new Rect(10, 10, 320, 300));
+        GUI.Box(new Rect(0, 0, 320, 300), "", boxStyle); // Vẽ background xám phía sau nội dung
         GUILayout.Label("☀ Solar System Simulation", titleStyle);
         
         if (settings != null)
         {
-            // Mode indicator
-            string modeText = settings.mode == SimulationSettings.SimMode.GameFriendly 
-                ? "🎮 Game-Friendly (distances compressed)" 
-                : "🔬 Realistic (true AU scale)";
-            GUILayout.Label(modeText);
-
+            GUILayout.Space(10);
+            
+            // Time Scale (Slider thay vì Button cứng nhắt)
             GUILayout.Label($"Time Scale: {settings.timeScale:F1} days/sec");
+            settings.timeScale = GUILayout.HorizontalSlider(settings.timeScale, 0f, 400f);
+            
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("⏸ Pause")) settings.timeScale = 0f;
+            if (GUILayout.Button("▶ Play (10x)")) settings.timeScale = 10f;
+            GUILayout.EndHorizontal();
 
-            // Distance compression info (GameFriendly only)
-            if (settings.mode == SimulationSettings.SimMode.GameFriendly)
+            GUILayout.Space(15);
+            GUIStyle boldLabel = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
+            GUILayout.Label("Display Settings:", boldLabel);
+            
+            // Friendly Toggles
+            bool toggleOrbits = GUILayout.Toggle(settings.showOrbits, " Show Orbits (Trails)");
+            if (toggleOrbits != settings.showOrbits)
             {
-                GUILayout.Label($"Compression: r^{settings.compressionPower:F2}");
+                settings.showOrbits = toggleOrbits;
+                CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
+                foreach (var body in allBodies)
+                {
+                    LineRenderer lr = body.GetComponent<LineRenderer>();
+                    if (lr != null) lr.enabled = settings.showOrbits;
+                }
+            }
+            
+            GUILayout.Space(5);
+            settings.enableSunDrift = GUILayout.Toggle(settings.enableSunDrift, " Enable Sun Drift (Galaxy Motion)");
+            if (settings.enableSunDrift)
+            {
+                GUILayout.Label($"  Sun Drift Speed: {settings.sunDriftSpeed:F3}");
+                settings.sunDriftSpeed = GUILayout.HorizontalSlider(settings.sunDriftSpeed, 0f, 0.2f);
             }
         }
-
-        // Time scale controls
-        GUILayout.BeginHorizontal();
-        if (GUILayout.Button("◀ Slower")) 
-            settings.timeScale = Mathf.Max(0.1f, settings.timeScale * 0.5f);
-        if (GUILayout.Button("▶ Faster")) 
-            settings.timeScale = Mathf.Min(1000f, settings.timeScale * 2f);
-        if (GUILayout.Button("⏸ Pause")) 
-            settings.timeScale = 0f;
-        if (GUILayout.Button("▶ Play")) 
-            settings.timeScale = 10f;
-        GUILayout.EndHorizontal();
-
         GUILayout.EndArea();
 
-        // === HELP (top-right) ===
+        // === CONTROLS / HELP (bottom-center) ===
         if (showHelp)
         {
-            GUILayout.BeginArea(new Rect(Screen.width - 280, 10, 270, 240));
-            GUI.Box(new Rect(0, 0, 270, 240), "");
-            GUILayout.Label("  Controls:");
-            GUILayout.Label("  Scroll: Zoom in/out");
-            GUILayout.Label("  Right-click + Drag: Rotate");
-            GUILayout.Label("  Left-click: Select planet");
-            GUILayout.Label("  1-9: Quick select planet");
-            GUILayout.Label("  Space: Reset camera");
-            GUILayout.Label("  R: Reset simulation");
-            GUILayout.Label("  H: Toggle this help");
+            // Tính toán vị trí ra giữa đáy màn hình
+            float helpWidth = 700f;
+            float helpHeight = 60f;
+            float helpX = (Screen.width - helpWidth) / 2f;
+            float helpY = Screen.height - helpHeight - 10f;
+            
+            GUILayout.BeginArea(new Rect(helpX, helpY, helpWidth, helpHeight));
+            GUI.Box(new Rect(0, 0, helpWidth, helpHeight), "", boxStyle);
+            GUILayout.BeginHorizontal();
+            
+            GUIStyle controlStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            GUILayout.Label("Scroll: Zoom", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("Right-click + Drag: Rotate", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("Left-click: Select planet", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("1-9: Quick select", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("Space: Reset cam", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("R: Reset Sim", controlStyle);
+            GUILayout.Label("|", controlStyle);
+            GUILayout.Label("H: Toggle Help", controlStyle);
+            
+            GUILayout.EndHorizontal();
             GUILayout.EndArea();
         }
 
@@ -79,37 +115,38 @@ public class SimulationUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R) && simulation != null)
             simulation.ResetSimulation();
 
-        // === SELECTED BODY INFO (bottom-left) ===
+        // === SELECTED BODY INFO (right-center) ===
         if (simCamera != null && simCamera.target != null)
         {
             CelestialBody selected = simCamera.target.GetComponent<CelestialBody>();
             if (selected != null)
             {
-                GUILayout.BeginArea(new Rect(10, Screen.height - 150, 380, 140));
-                GUI.Box(new Rect(0, 0, 380, 140), "");
+                float infoWidth = 300f;
+                float infoHeight = 150f;
+                float infoX = Screen.width - infoWidth - 20f;
+                float infoY = (Screen.height - infoHeight) / 2f;
+
+                GUILayout.BeginArea(new Rect(infoX, infoY, infoWidth, infoHeight));
+                GUI.Box(new Rect(0, 0, infoWidth, infoHeight), "", boxStyle);
                 
                 GUIStyle nameStyle = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = 14,
+                    fontSize = 15,
                     fontStyle = FontStyle.Bold
                 };
-                GUILayout.Label($"  {selected.bodyName}", nameStyle);
+                
+                GUILayout.Space(5);
+                GUILayout.Label($"  ❖ {selected.bodyName.ToUpper()}", nameStyle);
+                GUILayout.Space(5);
+                
                 GUILayout.Label($"  Mass: {selected.mass:E3} M☉");
-                GUILayout.Label($"  Physics Position: {selected.position}");
                 
                 double speed = selected.velocity.magnitude;
                 double speedKmS = speed * 1731.5; // AU/day → km/s
-                GUILayout.Label($"  Velocity: {speedKmS:F2} km/s ({speed:E4} AU/day)");
+                GUILayout.Label($"  Velocity: {speedKmS:F2} km/s");
                 
                 double distFromSun = selected.position.magnitude;
                 GUILayout.Label($"  Distance from Sun: {distFromSun:F4} AU");
-
-                // Show visual distance too in GameFriendly mode
-                if (settings != null && settings.mode == SimulationSettings.SimMode.GameFriendly)
-                {
-                    float visualDist = settings.RealToVisualDistance(distFromSun);
-                    GUILayout.Label($"  Visual Distance: {visualDist:F2} units (compressed)");
-                }
                 
                 GUILayout.EndArea();
             }

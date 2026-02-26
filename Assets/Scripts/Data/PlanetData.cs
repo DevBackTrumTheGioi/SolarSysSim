@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 
 /// <summary>
 /// Dữ liệu thực tế của các hành tinh trong Hệ Mặt Trời.
@@ -57,9 +57,13 @@ public static class PlanetData
         public double radius;          // AU (actual physical radius)
         public Color color;            // Visual color
         public float visualScale;      // Visual sphere scale in Unity units
+        public float axialTilt;        // Degrees (tilt of the rotation axis)
+        public float rotationPeriod;   // Earth Days for one full rotation
+        public string prefabPath;      // Đường dẫn prefab từ gói "Planets of the Solar System 3D"
 
         public BodyInfo(string name, double mass, double dist, double vel, 
-                       double radius, Color color, float visualScale)
+                       double radius, Color color, float visualScale, 
+                       float axialTilt = 0f, float rotationPeriod = 1f, string prefabPath = null)
         {
             this.name = name;
             this.mass = mass;
@@ -68,6 +72,9 @@ public static class PlanetData
             this.radius = radius;
             this.color = color;
             this.visualScale = visualScale;
+            this.axialTilt = axialTilt;
+            this.rotationPeriod = rotationPeriod;
+            this.prefabPath = prefabPath;
         }
     }
 
@@ -88,97 +95,124 @@ public static class PlanetData
         mass: 1.0,
         dist: 0.0,
         vel: 0.0,
-        radius: 0.00465,        // 696,340 km = 0.00465 AU
+        radius: 0.00465,
         color: new Color(1f, 0.9f, 0.3f),
-        visualScale: 0.8f       // Lớn nhất, nổi bật ở trung tâm
+        visualScale: 0.8f,
+        axialTilt: 7.25f,
+        rotationPeriod: 25.05f, // ~25 days at equator
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Sun"
     );
 
     /// <summary>Sao Thuỷ - hành tinh gần Mặt Trời nhất</summary>
     public static readonly BodyInfo Mercury = new BodyInfo(
         "Mercury",
-        mass: 1.659e-7,         // 3.301e23 kg
-        dist: 0.387,            // 0.387 AU
-        vel: 0.02765,           // √(G/0.387) = 0.02765 AU/day ≈ 47.87 km/s
-        radius: 1.631e-5,       // 2,439 km
+        mass: 1.659e-7,
+        dist: 0.387,
+        vel: 0.02765,
+        radius: 1.631e-5,
         color: new Color(0.7f, 0.7f, 0.7f),
-        visualScale: 0.15f      // Nhỏ nhất
+        visualScale: 0.15f,
+        axialTilt: 0.034f,
+        rotationPeriod: 58.646f,
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Mercury"
     );
 
     /// <summary>Sao Kim - "sao Mai/sao Hôm", kích thước gần bằng Trái Đất</summary>
     public static readonly BodyInfo Venus = new BodyInfo(
         "Venus",
-        mass: 2.448e-6,         // 4.867e24 kg
-        dist: 0.723,            // 0.723 AU
-        vel: 0.02023,           // √(G/0.723) = 0.02023 AU/day ≈ 35.02 km/s
-        radius: 4.045e-5,       // 6,052 km
+        mass: 2.448e-6,
+        dist: 0.723,
+        vel: 0.02023,
+        radius: 4.045e-5,
         color: new Color(0.9f, 0.7f, 0.3f),
-        visualScale: 0.25f      // Gần bằng Trái Đất
+        visualScale: 0.25f,
+        axialTilt: 177.36f, // Retrograde rotation
+        rotationPeriod: -243.025f, // Negative means opposite direction
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Venus"
     );
 
     /// <summary>Trái Đất - nhà của chúng ta, 1 AU = chuẩn khoảng cách</summary>
     public static readonly BodyInfo Earth = new BodyInfo(
         "Earth",
-        mass: 3.003e-6,         // 5.972e24 kg
-        dist: 1.0,              // 1.0 AU (by definition)
-        vel: 0.01720,           // √(G/1.0) = 0.01720 AU/day ≈ 29.78 km/s
-        radius: 4.259e-5,       // 6,371 km
+        mass: 3.003e-6,
+        dist: 1.0,
+        vel: 0.01720,
+        radius: 4.259e-5,
         color: new Color(0.2f, 0.5f, 1f),
-        visualScale: 0.25f      // "Nhà" của chúng ta
+        visualScale: 0.25f,
+        axialTilt: 23.44f,
+        rotationPeriod: 1.0f, // 1 Earth day
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Earth"
     );
 
     /// <summary>Sao Hoả - hành tinh đỏ</summary>
     public static readonly BodyInfo Mars = new BodyInfo(
         "Mars",
-        mass: 3.227e-7,         // 6.417e23 kg
-        dist: 1.524,            // 1.524 AU
-        vel: 0.01393,           // √(G/1.524) = 0.01393 AU/day ≈ 24.13 km/s
-        radius: 2.266e-5,       // 3,390 km
+        mass: 3.227e-7,
+        dist: 1.524,
+        vel: 0.01393,
+        radius: 2.266e-5,
         color: new Color(0.8f, 0.3f, 0.2f),
-        visualScale: 0.2f       // Nhỏ hơn Trái Đất
+        visualScale: 0.2f,
+        axialTilt: 25.19f,
+        rotationPeriod: 1.026f, // 24.6 hours
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Mars"
     );
 
-    /// <summary>Sao Mộc - hành tinh lớn nhất, "vacuum cleaner" của hệ mặt trời</summary>
+    /// <summary>Sao Mộc - hành tinh lớn nhất</summary>
     public static readonly BodyInfo Jupiter = new BodyInfo(
         "Jupiter",
-        mass: 9.543e-4,         // 1.898e27 kg
-        dist: 5.203,            // 5.203 AU
-        vel: 0.007541,          // √(G/5.203) = 0.007541 AU/day ≈ 13.06 km/s
-        radius: 4.673e-4,       // 69,911 km
+        mass: 9.543e-4,
+        dist: 5.203,
+        vel: 0.007541,
+        radius: 4.673e-4,
         color: new Color(0.8f, 0.6f, 0.4f),
-        visualScale: 0.5f       // Khổng lồ - gần bằng Sun visual
+        visualScale: 0.5f,
+        axialTilt: 3.13f,
+        rotationPeriod: 0.413f, // 9.9 hours
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Jupiter"
     );
 
     /// <summary>Sao Thổ - hành tinh có vành đai nổi tiếng</summary>
     public static readonly BodyInfo Saturn = new BodyInfo(
         "Saturn",
-        mass: 2.857e-4,         // 5.683e26 kg
-        dist: 9.537,            // 9.537 AU
-        vel: 0.005572,          // √(G/9.537) = 0.005572 AU/day ≈ 9.65 km/s
-        radius: 3.893e-4,       // 58,232 km
+        mass: 2.857e-4,
+        dist: 9.537,
+        vel: 0.005572,
+        radius: 3.893e-4,
         color: new Color(0.9f, 0.8f, 0.5f),
-        visualScale: 0.45f      // Gần bằng Jupiter
+        visualScale: 0.45f,
+        axialTilt: 26.73f,
+        rotationPeriod: 0.444f, // 10.7 hours
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Saturn"
     );
 
     /// <summary>Sao Thiên Vương - nghiêng 98° so với mặt phẳng quỹ đạo</summary>
     public static readonly BodyInfo Uranus = new BodyInfo(
         "Uranus",
-        mass: 4.366e-5,         // 8.681e25 kg
-        dist: 19.19,            // 19.19 AU
-        vel: 0.003927,          // √(G/19.19) = 0.003927 AU/day ≈ 6.80 km/s
-        radius: 1.695e-4,       // 25,362 km
+        mass: 4.366e-5,
+        dist: 19.19,
+        vel: 0.003927,
+        radius: 1.695e-4,
         color: new Color(0.5f, 0.8f, 0.9f),
-        visualScale: 0.35f      // Hành tinh băng khổng lồ
+        visualScale: 0.35f,
+        axialTilt: 97.77f, // Rolls on its side
+        rotationPeriod: -0.718f, // 17.2 hours (retrograde inside tilt)
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Uranus"
     );
 
     /// <summary>Sao Hải Vương - hành tinh xa nhất</summary>
     public static readonly BodyInfo Neptune = new BodyInfo(
         "Neptune",
-        mass: 5.151e-5,         // 1.024e26 kg
-        dist: 30.07,            // 30.07 AU
-        vel: 0.003137,          // √(G/30.07) = 0.003137 AU/day ≈ 5.43 km/s
-        radius: 1.646e-4,       // 24,622 km
+        mass: 5.151e-5,
+        dist: 30.07,
+        vel: 0.003137,
+        radius: 1.646e-4,
         color: new Color(0.3f, 0.4f, 0.9f),
-        visualScale: 0.35f      // Gần bằng Uranus
+        visualScale: 0.35f,
+        axialTilt: 28.32f,
+        rotationPeriod: 0.671f, // 16.1 hours
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Neptune"
     );
 
     /// <summary>
