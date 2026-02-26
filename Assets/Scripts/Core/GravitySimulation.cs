@@ -48,6 +48,7 @@ public class GravitySimulation : MonoBehaviour
 
     // Cached references
     private CelestialBody[] bodies;
+    private CelestialBody sunBody; // Tham chiếu Mặt Trời để làm gốc visual
     private bool isInitialized = false;
 
     // Pre-allocated arrays to avoid GC
@@ -72,6 +73,26 @@ public class GravitySimulation : MonoBehaviour
             return;
         }
 
+        // Tìm Mặt Trời để dùng làm gốc tham chiếu visual
+        sunBody = null;
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i].bodyName == "Sun")
+            {
+                sunBody = bodies[i];
+                break;
+            }
+        }
+        if (sunBody == null)
+        {
+            // Fallback: dùng body nặng nhất làm "Sun"
+            double maxMass = 0;
+            for (int i = 0; i < bodyCount; i++)
+            {
+                if (bodies[i].mass > maxMass) { maxMass = bodies[i].mass; sunBody = bodies[i]; }
+            }
+        }
+
         // Allocate arrays
         newAccelerations = new DoubleVector3[bodyCount];
 
@@ -93,6 +114,11 @@ public class GravitySimulation : MonoBehaviour
         Debug.Log($"[GravitySimulation] Initialized with {bodyCount} bodies. G = {settings.gravitationalConstant}");
     }
 
+    // === FIX 1 & 2: Giới hạn dt tối đa mỗi sub-step để tránh energy drift và orbit thẳng ===
+    // Khi timeScale lớn, tự động tăng subSteps để dt/step luôn đủ nhỏ.
+    // 0.5 days/step là ngưỡng an toàn cho quỹ đạo hành tinh trong Hệ Mặt Trời.
+    private const double MAX_DT_PER_STEP = 0.5; // days
+
     void FixedUpdate()
     {
         if (!isInitialized || bodies == null || bodyCount == 0) return;
@@ -101,24 +127,60 @@ public class GravitySimulation : MonoBehaviour
         // timeScale = số ngày Earth per giây real-time
         // Time.fixedDeltaTime = giây real-time per FixedUpdate
         double totalDt = settings.timeScale * Time.fixedDeltaTime; // days per FixedUpdate
-        double subDt = totalDt / settings.subSteps;
 
-        for (int step = 0; step < settings.subSteps; step++)
+        // === FIX 1 & 2: Tự động tăng subSteps khi timeScale lớn ===
+        // Đảm bảo mỗi sub-step không vượt quá MAX_DT_PER_STEP
+        // → quỹ đạo giữ nguyên hình tròn, không drift vào Mặt Trời, không thành đường thẳng
+        int dynamicSubSteps = Mathf.Max(settings.subSteps, Mathf.CeilToInt((float)(totalDt / MAX_DT_PER_STEP)));
+        double subDt = totalDt / dynamicSubSteps;
+
+        for (int step = 0; step < dynamicSubSteps; step++)
         {
             VelocityVerletStep(subDt);
         }
 
         // Update visual positions (physics → visual coordinate mapping)
+        // === FIX CHÍNH: Dùng sunBody làm gốc tham chiếu, nén khoảng cách TƯƠNG ĐỐI so với Mặt Trời ===
+        DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
+        Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
         for (int i = 0; i < bodyCount; i++)
         {
-            bodies[i].UpdateVisualPosition(settings);
+            bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
+            bodies[i].AddOrbitPoint(bodies[i].transform.position);
         }
+
+        // === FIX 3: Điều chỉnh số điểm orbit theo timeScale ===
+        // Speed nhanh → giữ ít điểm hơn → trail tự "ngắn" lại
+        UpdateOrbitPoints();
 
         // Track simulation time
         simulationDays += (float)totalDt;
 
         // Calculate total energy for debugging (conservation check)
         totalEnergy = ComputeTotalEnergy();
+    }
+
+    /// <summary>
+    /// === FIX 3: Điều chỉnh số điểm orbit theo timeScale ===
+    /// Speed nhanh → maxOrbitPoints ít → trail ngắn hơn về mặt real-time.
+    /// Công thức: points = basePoints / speedRatio
+    /// </summary>
+    private void UpdateOrbitPoints()
+    {
+        if (settings.timeScale <= 0f) return;
+
+        const float referenceSpeed = 10f;
+        float speedRatio = settings.timeScale / referenceSpeed;
+
+        // Base = 300 điểm ở tốc độ 10 days/sec
+        // Speed tăng 10x → giảm xuống 30 điểm → trail ngắn lại
+        int dynamicPoints = Mathf.RoundToInt(300f / speedRatio);
+        dynamicPoints = Mathf.Clamp(dynamicPoints, 30, 600);
+
+        for (int i = 0; i < bodyCount; i++)
+        {
+            bodies[i].SetOrbitMaxPoints(dynamicPoints);
+        }
     }
 
     /// <summary>
@@ -253,10 +315,12 @@ public class GravitySimulation : MonoBehaviour
 
         // Recompute initial accelerations
         ComputeAllAccelerations(bodies);
+        DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
+        Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
         for (int i = 0; i < bodyCount; i++)
         {
             bodies[i].acceleration = newAccelerations[i];
-            bodies[i].UpdateVisualPosition(settings);
+            bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
         }
     }
 }

@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mode: 1
   gravitationalConstant: 0.00029592
-  timeScale: 31.25
-  subSteps: 4
+  timeScale: 1000
+  subSteps: 5
   softeningFactor: 0.000000001
   baseDistance: 1.5
   distanceMultiplier: 2

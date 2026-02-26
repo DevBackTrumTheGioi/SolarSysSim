@@ -48,8 +48,16 @@ public class CelestialBody : MonoBehaviour
     [HideInInspector] public DoubleVector3 velocity;
     [HideInInspector] public DoubleVector3 acceleration;
 
-    // ==================== TRAIL ====================
-    private TrailRenderer trailRenderer;
+    // ==================== TRAIL (LineRenderer custom) ====================
+    private LineRenderer orbitLine;
+
+    // Circular buffer lưu các điểm quỹ đạo (visual positions)
+    private Vector3[] orbitPoints;
+    private int orbitHead = 0;      // Index điểm mới nhất
+    private int orbitCount = 0;     // Số điểm hiện có
+    private int maxOrbitPoints = 300; // Số điểm tối đa (~1 vòng quỹ đạo)
+
+    private float minPointSpacing = 0.01f; // Khoảng cách tối thiểu giữa 2 điểm (Unity units)
 
     /// <summary>
     /// Khởi tạo trạng thái từ initial conditions.
@@ -66,44 +74,114 @@ public class CelestialBody : MonoBehaviour
 
     /// <summary>
     /// Cập nhật visual position từ physics position.
-    /// Trong GameFriendly mode: dùng khoảng cách nén.
-    /// Trong Realistic mode: dùng khoảng cách thật.
+    /// sunPhysicsPos: vị trí physics của Mặt Trời (tham chiếu để nén khoảng cách).
+    /// 
+    /// === FIX: Nén khoảng cách TƯƠNG ĐỐI so với Mặt Trời ===
+    /// Trước đây nén từ gốc (0,0,0) → sai khi Mặt Trời drift.
+    /// Bây giờ nén từ vị trí Mặt Trời thực → luôn đúng.
     /// </summary>
-    public void UpdateVisualPosition(SimulationSettings settings)
+    public void UpdateVisualPosition(SimulationSettings settings, DoubleVector3 sunPhysicsPos, Vector3 sunVisualPos)
     {
         if (settings != null && settings.mode == SimulationSettings.SimMode.GameFriendly)
         {
-            // Nén khoảng cách cho visual: giữ hướng, đổi độ dài
-            DoubleVector3 visualPos = settings.PhysicsToVisualPosition(position);
-            transform.position = visualPos.ToVector3();
+            // Vector từ Mặt Trời đến hành tinh (physics)
+            DoubleVector3 relativePhysics = position - sunPhysicsPos;
+            DoubleVector3 visualOffset = settings.PhysicsToVisualPosition(relativePhysics);
+            transform.position = sunVisualPos + visualOffset.ToVector3();
         }
         else
         {
-            // Realistic: 1:1 mapping
             transform.position = position.ToVector3();
         }
     }
 
     /// <summary>
-    /// Setup TrailRenderer để vẽ quỹ đạo.
+    /// Setup LineRenderer thay vì TrailRenderer — mượt hơn ở mọi tốc độ.
     /// </summary>
     public void SetupTrail(SimulationSettings settings)
     {
         if (!settings.showOrbits) return;
 
-        trailRenderer = gameObject.GetComponent<TrailRenderer>();
-        if (trailRenderer == null)
-            trailRenderer = gameObject.AddComponent<TrailRenderer>();
+        // Xóa TrailRenderer cũ nếu có
+        TrailRenderer oldTrail = gameObject.GetComponent<TrailRenderer>();
+        if (oldTrail != null) DestroyImmediate(oldTrail);
 
-        trailRenderer.time = settings.trailDuration;
-        trailRenderer.startWidth = 0.02f;
-        trailRenderer.endWidth = 0.005f;
-        trailRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        trailRenderer.startColor = orbitColor;
-        trailRenderer.endColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
-        trailRenderer.numCornerVertices = 4;
-        trailRenderer.numCapVertices = 4;
-        trailRenderer.minVertexDistance = 0.02f;
+        orbitLine = gameObject.GetComponent<LineRenderer>();
+        if (orbitLine == null)
+            orbitLine = gameObject.AddComponent<LineRenderer>();
+
+        orbitLine.material = new Material(Shader.Find("Sprites/Default"));
+        orbitLine.startWidth = 0.05f;
+        orbitLine.endWidth = 0.01f;
+        orbitLine.startColor = orbitColor;
+        orbitLine.endColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
+        orbitLine.numCornerVertices = 0;
+        orbitLine.numCapVertices = 0;
+        orbitLine.useWorldSpace = true;
+        orbitLine.positionCount = 0;
+
+        // Init circular buffer
+        maxOrbitPoints = 300;
+        orbitPoints = new Vector3[maxOrbitPoints];
+        orbitHead = 0;
+        orbitCount = 0;
+    }
+
+    /// <summary>
+    /// Thêm điểm mới vào orbit trail. Gọi sau mỗi lần UpdateVisualPosition.
+    /// Circular buffer: điểm cũ nhất tự bị xóa khi đầy.
+    /// </summary>
+    public void AddOrbitPoint(Vector3 pos)
+    {
+        if (orbitLine == null || orbitPoints == null) return;
+
+        // Chỉ thêm nếu đủ xa điểm trước (tránh quá nhiều điểm chồng nhau)
+        if (orbitCount > 0)
+        {
+            int lastIdx = (orbitHead - 1 + maxOrbitPoints) % maxOrbitPoints;
+            if (Vector3.SqrMagnitude(pos - orbitPoints[lastIdx]) < minPointSpacing * minPointSpacing)
+                return;
+        }
+
+        orbitPoints[orbitHead] = pos;
+        orbitHead = (orbitHead + 1) % maxOrbitPoints;
+        if (orbitCount < maxOrbitPoints) orbitCount++;
+
+        // Rebuild LineRenderer từ circular buffer (theo thứ tự cũ → mới)
+        orbitLine.positionCount = orbitCount;
+        for (int i = 0; i < orbitCount; i++)
+        {
+            int idx = (orbitHead - orbitCount + i + maxOrbitPoints) % maxOrbitPoints;
+            orbitLine.SetPosition(i, orbitPoints[idx]);
+        }
+
+        // Fade: điểm đầu (cũ nhất) trong suốt, điểm cuối (mới nhất) đậm
+        orbitLine.startColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
+        orbitLine.endColor = orbitColor;
+    }
+
+    /// <summary>
+    /// Cập nhật số điểm tối đa dựa theo tốc độ — speed nhanh thì giữ ít điểm hơn.
+    /// </summary>
+    public void SetOrbitMaxPoints(int points)
+    {
+        if (points == maxOrbitPoints || orbitPoints == null) return;
+
+        // Resize buffer, giữ lại các điểm gần nhất
+        int newMax = Mathf.Max(50, points);
+        Vector3[] newBuffer = new Vector3[newMax];
+        int copyCount = Mathf.Min(orbitCount, newMax);
+
+        for (int i = 0; i < copyCount; i++)
+        {
+            int srcIdx = (orbitHead - copyCount + i + maxOrbitPoints) % maxOrbitPoints;
+            newBuffer[i] = orbitPoints[srcIdx];
+        }
+
+        orbitPoints = newBuffer;
+        maxOrbitPoints = newMax;
+        orbitHead = copyCount % newMax;
+        orbitCount = copyCount;
     }
 
     /// <summary>
@@ -111,8 +189,16 @@ public class CelestialBody : MonoBehaviour
     /// </summary>
     public void ClearTrail()
     {
-        if (trailRenderer != null)
-            trailRenderer.Clear();
+        if (orbitLine != null)
+        {
+            orbitLine.positionCount = 0;
+        }
+        orbitHead = 0;
+        orbitCount = 0;
     }
-}
 
+    /// <summary>
+    /// Legacy — giữ lại để không break compile, không dùng nữa.
+    /// </summary>
+    public void SetTrailDuration(float duration) { }
+}
