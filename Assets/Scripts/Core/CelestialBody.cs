@@ -53,11 +53,13 @@ public class CelestialBody : MonoBehaviour
 
     // Circular buffer lưu các điểm quỹ đạo (visual positions)
     private Vector3[] orbitPoints;
-    private int orbitHead = 0;      // Index điểm mới nhất
-    private int orbitCount = 0;     // Số điểm hiện có
-    private int maxOrbitPoints = 300; // Số điểm tối đa (~1 vòng quỹ đạo)
+    private int orbitHead = 0;        // Index slot tiếp theo sẽ ghi
+    private int orbitCount = 0;       // Số điểm hiện có (tăng đến maxOrbitPoints rồi giữ)
+    private int maxOrbitPoints = 1000; // Số điểm tối đa — đủ cao để trail mượt
 
-    private float minPointSpacing = 0.01f; // Khoảng cách tối thiểu giữa 2 điểm (Unity units)
+    // reusable temp array để set vào LineRenderer (tránh alloc mỗi frame)
+    private Vector3[] linePositionsTemp;
+    private bool lineIsFull = false;  // true khi buffer đã wrap around lần đầu
 
     /// <summary>
     /// Khởi tạo trạng thái từ initial conditions.
@@ -111,65 +113,81 @@ public class CelestialBody : MonoBehaviour
             orbitLine = gameObject.AddComponent<LineRenderer>();
 
         orbitLine.material = new Material(Shader.Find("Sprites/Default"));
-        orbitLine.startWidth = 0.05f;
+        orbitLine.startWidth = 0.04f;
         orbitLine.endWidth = 0.01f;
-        orbitLine.startColor = orbitColor;
-        orbitLine.endColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
+        orbitLine.startColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
+        orbitLine.endColor = orbitColor;
         orbitLine.numCornerVertices = 0;
         orbitLine.numCapVertices = 0;
         orbitLine.useWorldSpace = true;
         orbitLine.positionCount = 0;
 
-        // Init circular buffer
-        maxOrbitPoints = 300;
+        // Pre-allocate buffer
+        maxOrbitPoints = 1000;
         orbitPoints = new Vector3[maxOrbitPoints];
+        linePositionsTemp = new Vector3[maxOrbitPoints];
         orbitHead = 0;
         orbitCount = 0;
+        lineIsFull = false;
     }
 
     /// <summary>
-    /// Thêm điểm mới vào orbit trail. Gọi sau mỗi lần UpdateVisualPosition.
-    /// Circular buffer: điểm cũ nhất tự bị xóa khi đầy.
+    /// Thêm điểm mới. Khi buffer chưa đầy: append + tăng positionCount.
+    /// Khi buffer đã đầy: ghi đè điểm cũ nhất, shift toàn bộ chỉ 1 lần/frame.
     /// </summary>
     public void AddOrbitPoint(Vector3 pos)
     {
         if (orbitLine == null || orbitPoints == null) return;
 
-        // Chỉ thêm nếu đủ xa điểm trước (tránh quá nhiều điểm chồng nhau)
-        if (orbitCount > 0)
-        {
-            int lastIdx = (orbitHead - 1 + maxOrbitPoints) % maxOrbitPoints;
-            if (Vector3.SqrMagnitude(pos - orbitPoints[lastIdx]) < minPointSpacing * minPointSpacing)
-                return;
-        }
-
+        // Ghi vào head
         orbitPoints[orbitHead] = pos;
         orbitHead = (orbitHead + 1) % maxOrbitPoints;
-        if (orbitCount < maxOrbitPoints) orbitCount++;
 
-        // Rebuild LineRenderer từ circular buffer (theo thứ tự cũ → mới)
-        orbitLine.positionCount = orbitCount;
-        for (int i = 0; i < orbitCount; i++)
+        if (!lineIsFull)
         {
-            int idx = (orbitHead - orbitCount + i + maxOrbitPoints) % maxOrbitPoints;
-            orbitLine.SetPosition(i, orbitPoints[idx]);
-        }
+            orbitCount++;
+            orbitLine.positionCount = orbitCount;
+            // Chỉ set điểm mới nhất — nhanh O(1)
+            orbitLine.SetPosition(orbitCount - 1, pos);
 
-        // Fade: điểm đầu (cũ nhất) trong suốt, điểm cuối (mới nhất) đậm
-        orbitLine.startColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
-        orbitLine.endColor = orbitColor;
+            if (orbitCount >= maxOrbitPoints)
+                lineIsFull = true;
+        }
+        else
+        {
+            // Buffer đầy: rebuild theo đúng thứ tự từ head (điểm cũ nhất) → head-1 (mới nhất)
+            // Chỉ rebuild khi lineIsFull vừa được set hoặc mỗi frame (orbitHead % rebuild rate)
+            // Rebuild toàn bộ 1 lần — unavoidable khi circular, nhưng dùng SetPositions(array) thay vì loop
+            for (int i = 0; i < maxOrbitPoints; i++)
+            {
+                int idx = (orbitHead + i) % maxOrbitPoints;
+                linePositionsTemp[i] = orbitPoints[idx];
+            }
+            orbitLine.positionCount = maxOrbitPoints;
+            orbitLine.SetPositions(linePositionsTemp); // 1 draw call thay vì N SetPosition
+        }
     }
 
     /// <summary>
-    /// Cập nhật số điểm tối đa dựa theo tốc độ — speed nhanh thì giữ ít điểm hơn.
+    /// Cập nhật số điểm tối đa theo orbital period.
+    /// Được gọi 1 lần sau Init — không gọi liên tục mỗi frame.
     /// </summary>
     public void SetOrbitMaxPoints(int points)
     {
-        if (points == maxOrbitPoints || orbitPoints == null) return;
+        int newMax = Mathf.Clamp(points, 60, 2000);
 
-        // Resize buffer, giữ lại các điểm gần nhất
-        int newMax = Mathf.Max(50, points);
+        // Nếu chưa có buffer (gọi trước SetupTrail) → chỉ lưu giá trị
+        if (orbitPoints == null)
+        {
+            maxOrbitPoints = newMax;
+            return;
+        }
+
+        if (newMax == maxOrbitPoints) return;
+
+        // Giữ lại các điểm gần nhất
         Vector3[] newBuffer = new Vector3[newMax];
+        Vector3[] newTemp   = new Vector3[newMax];
         int copyCount = Mathf.Min(orbitCount, newMax);
 
         for (int i = 0; i < copyCount; i++)
@@ -178,27 +196,32 @@ public class CelestialBody : MonoBehaviour
             newBuffer[i] = orbitPoints[srcIdx];
         }
 
-        orbitPoints = newBuffer;
-        maxOrbitPoints = newMax;
-        orbitHead = copyCount % newMax;
-        orbitCount = copyCount;
+        orbitPoints       = newBuffer;
+        linePositionsTemp = newTemp;
+        maxOrbitPoints    = newMax;
+        orbitHead         = copyCount % newMax;
+        orbitCount        = copyCount;
+        lineIsFull        = (orbitCount >= newMax);
+
+        if (orbitLine != null)
+        {
+            orbitLine.positionCount = orbitCount;
+            for (int i = 0; i < orbitCount; i++)
+                orbitLine.SetPosition(i, orbitPoints[i]);
+        }
     }
 
     /// <summary>
-    /// Xóa trail (hữu ích khi reset simulation).
+    /// Xóa trail.
     /// </summary>
     public void ClearTrail()
     {
         if (orbitLine != null)
-        {
             orbitLine.positionCount = 0;
-        }
-        orbitHead = 0;
+        orbitHead  = 0;
         orbitCount = 0;
+        lineIsFull = false;
     }
 
-    /// <summary>
-    /// Legacy — giữ lại để không break compile, không dùng nữa.
-    /// </summary>
     public void SetTrailDuration(float duration) { }
 }

@@ -101,6 +101,9 @@ public class GravitySimulation : MonoBehaviour
         {
             bodies[i].Initialize();
             bodies[i].SetupTrail(settings);
+            // Tính số điểm trail = đúng 1 vòng quỹ đạo
+            int pts = CalcOrbitPoints(bodies[i]);
+            bodies[i].SetOrbitMaxPoints(pts);
         }
 
         // Compute initial accelerations (needed for Verlet step 1)
@@ -139,19 +142,17 @@ public class GravitySimulation : MonoBehaviour
             VelocityVerletStep(subDt);
         }
 
-        // Update visual positions (physics → visual coordinate mapping)
-        // === FIX CHÍNH: Dùng sunBody làm gốc tham chiếu, nén khoảng cách TƯƠNG ĐỐI so với Mặt Trời ===
+        // Update visual positions + trail
         DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
         Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
         for (int i = 0; i < bodyCount; i++)
         {
             bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
-            bodies[i].AddOrbitPoint(bodies[i].transform.position);
+            // Sun không cần trail
+            if (bodies[i] != sunBody)
+                bodies[i].AddOrbitPoint(bodies[i].transform.position);
         }
 
-        // === FIX 3: Điều chỉnh số điểm orbit theo timeScale ===
-        // Speed nhanh → giữ ít điểm hơn → trail tự "ngắn" lại
-        UpdateOrbitPoints();
 
         // Track simulation time
         simulationDays += (float)totalDt;
@@ -161,26 +162,24 @@ public class GravitySimulation : MonoBehaviour
     }
 
     /// <summary>
-    /// === FIX 3: Điều chỉnh số điểm orbit theo timeScale ===
-    /// Speed nhanh → maxOrbitPoints ít → trail ngắn hơn về mặt real-time.
-    /// Công thức: points = basePoints / speedRatio
+    /// Tính số điểm trail cần thiết để hiển thị đúng 1 vòng quỹ đạo.
+    /// Kepler's 3rd: T (days) = 365.25 × a^1.5  (a = semi-major axis AU)
+    /// Points = T (days) / timeScale (days/sec) × 50 (fps) = số frame cho 1 vòng
     /// </summary>
-    private void UpdateOrbitPoints()
+    private int CalcOrbitPoints(CelestialBody body)
     {
-        if (settings.timeScale <= 0f) return;
+        double dist = body.position.magnitude; // AU từ Mặt Trời
+        if (dist < 0.01) return 50; // Sun hoặc quá gần
 
-        const float referenceSpeed = 10f;
-        float speedRatio = settings.timeScale / referenceSpeed;
+        // Kepler's 3rd law: T (years) = a^1.5 → T (days) = 365.25 × a^1.5
+        double periodDays = 365.25 * System.Math.Pow(dist, 1.5);
 
-        // Base = 300 điểm ở tốc độ 10 days/sec
-        // Speed tăng 10x → giảm xuống 30 điểm → trail ngắn lại
-        int dynamicPoints = Mathf.RoundToInt(300f / speedRatio);
-        dynamicPoints = Mathf.Clamp(dynamicPoints, 30, 600);
+        // Số FixedUpdate frame để hoàn thành 1 vòng
+        float fixedFps = 1f / Time.fixedDeltaTime; // ~50
+        float timeScaleSafe = Mathf.Max(settings.timeScale, 0.1f);
+        int points = Mathf.RoundToInt((float)(periodDays / timeScaleSafe) * fixedFps);
 
-        for (int i = 0; i < bodyCount; i++)
-        {
-            bodies[i].SetOrbitMaxPoints(dynamicPoints);
-        }
+        return Mathf.Clamp(points, 60, 2000);
     }
 
     /// <summary>
