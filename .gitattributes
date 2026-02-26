@@ -1,0 +1,63 @@
+﻿# Unity YAML merge driver
+* text=auto
+
+# Unity specific binary formats - treat as binary to avoid merge conflicts
+*.unity        merge=unityyamlmerge eol=lf
+*.prefab       merge=unityyamlmerge eol=lf
+*.asset        merge=unityyamlmerge eol=lf
+*.meta         merge=unityyamlmerge eol=lf
+*.mat          merge=unityyamlmerge eol=lf
+*.anim         merge=unityyamlmerge eol=lf
+*.controller   merge=unityyamlmerge eol=lf
+*.overrideController merge=unityyamlmerge eol=lf
+*.physicsMaterial    merge=unityyamlmerge eol=lf
+*.physicsMaterial2D  merge=unityyamlmerge eol=lf
+*.playable      merge=unityyamlmerge eol=lf
+*.renderTexture merge=unityyamlmerge eol=lf
+*.spriteatlas   merge=unityyamlmerge eol=lf
+
+# Binary files - Git LFS recommended
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.bmp        binary
+*.tga        binary
+*.tiff       binary
+*.psd        binary
+*.exr        binary
+
+*.fbx        binary
+*.obj        binary
+*.blend      binary
+*.dae        binary
+*.3ds        binary
+
+*.wav        binary
+*.mp3        binary
+*.ogg        binary
+*.aiff       binary
+*.aif        binary
+
+*.ttf        binary
+*.otf        binary
+
+*.dll        binary
+*.a          binary
+*.so         binary
+*.dylib      binary
+*.exe        binary
+
+# Source code - LF line endings
+*.cs         text eol=lf
+*.shader     text eol=lf
+*.cginc      text eol=lf
+*.hlsl       text eol=lf
+*.glsl       text eol=lf
+*.json       text eol=lf
+*.xml        text eol=lf
+*.md         text eol=lf
+*.txt        text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
+
