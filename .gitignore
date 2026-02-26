@@ -60,6 +60,7 @@ Thumbs.db
 .idea/
 .vs/
 .vscode/
+*.vsconfig
 
 # --- User Specific ---
 UserSettings/
