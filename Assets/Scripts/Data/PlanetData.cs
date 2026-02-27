@@ -59,11 +59,13 @@ public static class PlanetData
         public float visualScale;      // Visual sphere scale in Unity units
         public float axialTilt;        // Degrees (tilt of the rotation axis)
         public float rotationPeriod;   // Earth Days for one full rotation
+        public string orbitParentName; // Name of the parent body (e.g., "Earth" for Moon). Null for orbiting Sun.
         public string prefabPath;      // Đường dẫn prefab từ gói "Planets of the Solar System 3D"
 
         public BodyInfo(string name, double mass, double dist, double vel, 
                        double radius, Color color, float visualScale, 
-                       float axialTilt = 0f, float rotationPeriod = 1f, string prefabPath = null)
+                       float axialTilt = 0f, float rotationPeriod = 1f, 
+                       string orbitParentName = null, string prefabPath = null)
         {
             this.name = name;
             this.mass = mass;
@@ -74,6 +76,7 @@ public static class PlanetData
             this.visualScale = visualScale;
             this.axialTilt = axialTilt;
             this.rotationPeriod = rotationPeriod;
+            this.orbitParentName = orbitParentName;
             this.prefabPath = prefabPath;
         }
     }
@@ -136,13 +139,29 @@ public static class PlanetData
         "Earth",
         mass: 3.003e-6,
         dist: 1.0,
-        vel: 0.01720,
+        vel: 0.01720, 
         radius: 4.259e-5,
         color: new Color(0.2f, 0.5f, 1f),
         visualScale: 0.25f,
         axialTilt: 23.44f,
         rotationPeriod: 1.0f, // 1 Earth day
+        orbitParentName: null, // Quay quanh Sun mặc định
         prefabPath: "Planets of the Solar System 3D/Prefabs/Earth"
+    );
+
+    /// <summary>Mặt Trăng - Vệ tinh 1 của Trái Đất (Khoảng cách nén nhỏ, mass nhỏ)</summary>
+    public static readonly BodyInfo Moon = new BodyInfo(
+        "Moon",
+        mass: 3.69e-8,       // ~0.0123 Earth masses
+        dist: 0.00257,       // ~384,400 km
+        vel: 0.00059,        // ~1.022 km/s (relative to Earth)
+        radius: 1.162e-5,    // Mỏng mảnh
+        color: new Color(0.8f, 0.8f, 0.8f),
+        visualScale: 0.08f,  // Nhỏ gọn
+        axialTilt: 1.54f,    // Gần như đứng thẳng
+        rotationPeriod: 27.32f, // Khoá thuỷ triều
+        orbitParentName: "Earth", // CÚ PHÁP ĐẶC BIỆT LÀM MẶT TRĂNG
+        prefabPath: "Planets of the Solar System 3D/Prefabs/Moon" // Bạn có thể kéo thả Prefab Mặt trăng vào nếu có
     );
 
     /// <summary>Sao Hoả - hành tinh đỏ</summary>
@@ -220,7 +239,7 @@ public static class PlanetData
     /// </summary>
     public static readonly BodyInfo[] AllBodies = new BodyInfo[]
     {
-        Sun, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune
+        Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune
     };
 }
 

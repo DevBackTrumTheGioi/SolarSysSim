@@ -51,9 +51,13 @@ public class SimulationSettings : ScriptableObject
     [Tooltip("G trong hệ đơn vị AU³/(M☉·day²). Giá trị chuẩn: 2.9592e-4")]
     public double gravitationalConstant = 2.9592e-4;
 
-    [Header("=== TIME CONTROL ===")]
+    [Header("=== TIME & GRAVITY CONTROL ===")]
     [Tooltip("Số ngày Earth mô phỏng per real-time second. VD: 10 = 10 ngày/giây")]
     public float timeScale = 10f;
+
+    [Tooltip("Hệ số nhân lực hấp dẫn. 1.0 = Bình thường. Dùng để xem thiên tai khi tăng/giảm trọng lực hệ.")]
+    [Range(0.1f, 10f)]
+    public float gravityMultiplier = 1.0f;
 
     [Tooltip("Số sub-steps per FixedUpdate. Tăng = chính xác hơn, nặng hơn. 4-8 là tốt.")]
     [Range(1, 32)]
@@ -83,8 +87,8 @@ public class SimulationSettings : ScriptableObject
     [Tooltip("Bật TrailRenderer để vẽ quỹ đạo")]
     public bool showOrbits = true;
 
-    [Tooltip("Hệ số phóng đại kích thước hành tinh (chỉ visual, không ảnh hưởng physics)")]
-    public float visualScaleMultiplier = 1f;
+    [Tooltip("Hệ số phóng đại kích thước hành tinh. 0.55 = Friendly (dễ nhìn), 0.01 = Realistic (Siêu nhỏ, y hệt thực tế)")]
+    public float visualScaleMultiplier = 0.55f;
 
     [Tooltip("Chiều dài trail (số giây real-time)")]
     public float trailDuration = 30f;

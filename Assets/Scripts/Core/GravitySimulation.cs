@@ -125,14 +125,12 @@ public class GravitySimulation : MonoBehaviour
     // không bị nhảy bước quá lớn trong tích phân vật lý gây ra rung lắc quỹ đạo.
     private const double MAX_DT_PER_STEP = 0.05; // days
 
-    void FixedUpdate()
+    void Update()
     {
         if (!isInitialized || bodies == null || bodyCount == 0) return;
 
-        // Tính dt cho mỗi sub-step
-        // timeScale = số ngày Earth per giây real-time
-        // Time.fixedDeltaTime = giây real-time per FixedUpdate
-        double totalDt = settings.timeScale * Time.fixedDeltaTime; // days per FixedUpdate
+        // Tính dt cho mỗi bước (đồng bộ hoàn hảo với khung hình vẽ màn hình để xoá Stutter/Jitter)
+        double totalDt = settings.timeScale * Time.deltaTime; // days per frame
 
         // === FIX 1 & 2: Tự động tăng subSteps khi timeScale lớn ===
         // Đảm bảo mỗi sub-step không vượt quá MAX_DT_PER_STEP
@@ -181,20 +179,34 @@ public class GravitySimulation : MonoBehaviour
         Transform focusTarget = simCamera != null ? simCamera.target : null;
         Vector3 sunVisualPos = sunBody != null ? sunBody.transform.position : Vector3.zero;
         
+        // Lượt 1: Phun cập nhật đồ hoạ cho các Hành tinh gốc trước (quanh Sun)
         for (int i = 0; i < bodyCount; i++)
         {
-            // Chỉ cập nhật Visual rotation khi tốc độ thời gian thật chậm (timeScale < 1)
-            // để tránh người xem bị chóng mặt khi mô phỏng ở tốc độ cao
             if (settings.timeScale < 1f)
             {
                 bodies[i].UpdateRotation(settings.timeScale);
             }
 
-            // Sun đã update ở trên, skip update position again
             if (bodies[i] == sunBody) continue;
 
-            bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
-            bodies[i].AddOrbitPoint(bodies[i].transform.position);
+            if (bodies[i].orbitParent == null)
+            {
+                bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
+                bodies[i].AddOrbitPoint(bodies[i].transform.position);
+            }
+        }
+
+        // Lượt 2: Cập nhật đồ hoạ Vệ tinh (như Moon) - Đảm bảo lấy được vị trí Trái Đất mới nhất 
+        // Triệt tiêu hiện tượng lag 1-frame giật lắc
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i] == sunBody) continue;
+
+            if (bodies[i].orbitParent != null)
+            {
+                bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
+                bodies[i].AddOrbitPoint(bodies[i].transform.position);
+            }
         }
 
 
@@ -276,7 +288,7 @@ public class GravitySimulation : MonoBehaviour
     /// </summary>
     private void ComputeAllAccelerations(CelestialBody[] allBodies)
     {
-        double G = settings.gravitationalConstant;
+        double G = settings.gravitationalConstant * settings.gravityMultiplier;
         double softening = settings.softeningFactor;
 
         // Reset accelerations
@@ -321,7 +333,7 @@ public class GravitySimulation : MonoBehaviour
     /// </summary>
     private double ComputeTotalEnergy()
     {
-        double G = settings.gravitationalConstant;
+        double G = settings.gravitationalConstant * settings.gravityMultiplier;
         double kinetic = 0;
         double potential = 0;
 

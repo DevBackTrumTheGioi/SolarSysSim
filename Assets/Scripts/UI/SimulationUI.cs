@@ -12,6 +12,11 @@ public class SimulationUI : MonoBehaviour
 
     private bool showHelp = true;
     private Texture2D bgTexture;
+    
+    // Lưu tạm string nhập vào UI Editor
+    private CelestialBody currentEditingBody;
+    private string editMassStr = "1.0";
+    private string editVelocityStr = "29.78";
 
     void OnGUI()
     {
@@ -49,22 +54,30 @@ public class SimulationUI : MonoBehaviour
             if (GUILayout.Button("▶ Play (10x)")) settings.timeScale = 10f;
             GUILayout.EndHorizontal();
 
+            // Gravity Multiplier
+            GUILayout.Space(5);
+            GUILayout.Label($"Gravity: {settings.gravityMultiplier:F1}x");
+            settings.gravityMultiplier = GUILayout.HorizontalSlider(settings.gravityMultiplier, 0.1f, 10f);
+
             GUILayout.Space(15);
             GUIStyle boldLabel = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
             GUILayout.Label("Display Settings:", boldLabel);
             
-            // Friendly Toggles
-            bool toggleOrbits = GUILayout.Toggle(settings.showOrbits, " Show Orbits (Trails)");
-            if (toggleOrbits != settings.showOrbits)
+            // Visual Modes (Realistic vs Friendly)
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("☄ Friendly Mode"))
             {
-                settings.showOrbits = toggleOrbits;
-                CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
-                foreach (var body in allBodies)
-                {
-                    LineRenderer lr = body.GetComponent<LineRenderer>();
-                    if (lr != null) lr.enabled = settings.showOrbits;
-                }
+                settings.visualScaleMultiplier = 0.55f;
+                settings.showOrbits = true;
+                UpdateOrbitLines(true);
             }
+            if (GUILayout.Button("🔭 Realistic Mode"))
+            {
+                settings.visualScaleMultiplier = 0.01f;
+                settings.showOrbits = false;
+                UpdateOrbitLines(false);
+            }
+            GUILayout.EndHorizontal();
             
             GUILayout.Space(5);
             settings.enableSunDrift = GUILayout.Toggle(settings.enableSunDrift, " Enable Sun Drift (Galaxy Motion)");
@@ -72,6 +85,12 @@ public class SimulationUI : MonoBehaviour
             {
                 GUILayout.Label($"  Sun Drift Speed: {settings.sunDriftSpeed:F3}");
                 settings.sunDriftSpeed = GUILayout.HorizontalSlider(settings.sunDriftSpeed, 0f, 0.2f);
+            }
+
+            GUILayout.Space(15);
+            if (GUILayout.Button("🔄 Reset Planets to Default", GUILayout.Height(25)))
+            {
+                ResetAllPlanetsToDefault();
             }
         }
         GUILayout.EndArea();
@@ -121,8 +140,8 @@ public class SimulationUI : MonoBehaviour
             CelestialBody selected = simCamera.target.GetComponent<CelestialBody>();
             if (selected != null)
             {
-                float infoWidth = 300f;
-                float infoHeight = 150f;
+                float infoWidth = 320f;
+                float infoHeight = 220f;
                 float infoX = Screen.width - infoWidth - 20f;
                 float infoY = (Screen.height - infoHeight) / 2f;
 
@@ -139,18 +158,125 @@ public class SimulationUI : MonoBehaviour
                 GUILayout.Label($"  ❖ {selected.bodyName.ToUpper()}", nameStyle);
                 GUILayout.Space(5);
                 
-                GUILayout.Label($"  Mass: {selected.mass:E3} M☉");
+                // Track body changes để reset text field
+                if (currentEditingBody != selected)
+                {
+                    currentEditingBody = selected;
+                    editMassStr = selected.mass.ToString("E3"); // Khoa học (ex: 3.003E-006)
+                    double speedKmS_init = selected.velocity.magnitude * 1731.5;
+                    editVelocityStr = speedKmS_init.ToString("F2");
+                }
                 
-                double speed = selected.velocity.magnitude;
-                double speedKmS = speed * 1731.5; // AU/day → km/s
-                GUILayout.Label($"  Velocity: {speedKmS:F2} km/s");
+                // === EDIT MASS ===
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("  Mass (x M☉):", GUILayout.Width(110));
+                editMassStr = GUILayout.TextField(editMassStr);
+                GUILayout.EndHorizontal();
+                
+                // === EDIT VELOCITY ===
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("  Velocity (km/s):", GUILayout.Width(110));
+                editVelocityStr = GUILayout.TextField(editVelocityStr);
+                GUILayout.EndHorizontal();
                 
                 double distFromSun = selected.position.magnitude;
                 GUILayout.Label($"  Distance from Sun: {distFromSun:F4} AU");
                 
+                GUILayout.Space(10);
+                if (GUILayout.Button("⚡ APPLY ALTERS", GUILayout.Height(30)))
+                {
+                    ApplyEditing(selected);
+                }
+                
                 GUILayout.EndArea();
             }
         }
+    }
+
+    void UpdateOrbitLines(bool show)
+    {
+        CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
+        foreach (var body in allBodies)
+        {
+            LineRenderer lr = body.GetComponent<LineRenderer>();
+            if (lr != null) lr.enabled = show;
+        }
+    }
+
+    void ApplyEditing(CelestialBody body)
+    {
+        try 
+        {
+            // 1. Áp dụng khối lượng mới
+            if (double.TryParse(editMassStr, out double newMass))
+            {
+                body.mass = newMass;
+            }
+
+            // 2. Cập nhật Vector Vận tốc mới
+            if (double.TryParse(editVelocityStr, out double newSpeedKmS))
+            {
+                double newSpeedAU = newSpeedKmS / 1731.5; // Đổi lại ra AU/day
+                
+                // Lấy hướng (direction) của vận tốc hiện tại
+                DoubleVector3 direction = DoubleVector3.zero;
+                if (body.velocity.sqrMagnitude > 1e-15)
+                {
+                    direction = body.velocity / body.velocity.magnitude;
+                }
+                else 
+                {
+                    // Nếu vật đang đứng yên (vel=0), gán đại một hướng rơi (như trục X) để chạy 
+                    direction = new DoubleVector3(1, 0, 0); 
+                }
+
+                // Gán vận tốc mới
+                body.velocity = direction * newSpeedAU;
+            }
+
+            // 3. Xoá trail cũ (vì quỹ đạo vừa bị thay đổi đột ngột)
+            body.ClearTrail();
+            
+            Debug.Log($"[SimulationUI] Applied alters to {body.bodyName}");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[SimulationUI] Lỗi parse dữ liệu. Vui lòng thử lại. Error: {e.Message}");
+        }
+    }
+
+    void ResetAllPlanetsToDefault()
+    {
+        CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
+        foreach (var body in allBodies)
+        {
+            foreach (var info in PlanetData.AllBodies)
+            {
+                if (body.bodyName == info.name)
+                {
+                    body.mass = info.mass;
+                    break;
+                }
+            }
+        }
+        
+        // Trả lại các Mode phá hoại không gian về mặc định
+        if (settings != null)
+        {
+            settings.gravityMultiplier = 1.0f;
+            settings.timeScale = 10f;
+        }
+
+        // Gọi hàm Render lại toàn bộ Physics từ Script cha
+        if (simulation != null)
+        {
+            simulation.ResetSimulation();
+        }
+        
+        // Reset Text field cache để Panel Info tự vẽ lại
+        currentEditingBody = null;
+        
+        Debug.Log("[SimulationUI] Restored all planetary masses and reset the simulation.");
     }
 }
 

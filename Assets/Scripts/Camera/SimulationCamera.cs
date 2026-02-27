@@ -171,14 +171,18 @@ public class SimulationCamera : MonoBehaviour
         if (settings != null) settings.timeScale = 0.05f; // Giảm xuống 0.05 days/sec
         
         // Auto-zoom lại gần
-        float baseScale = 1f;
-        // Vì Data lưu visualScale ở PlanetData, nhưng ta có thể ước lượng bằng localScale
-        baseScale = body.transform.localScale.x; 
+        float baseScale = body.baseVisualScale; 
         
         // Tùy mặt trời hoặc hành tinh mà góc nhìn khác nhau
         float zoomMultiplier = (body.bodyName == "Sun") ? 4f : 3f;
-        targetDistance = baseScale * zoomMultiplier;
-        targetDistance = Mathf.Clamp(targetDistance, minDistance, maxDistance);
+        
+        // Cân nhắc theo tỷ lệ hệ thống (Nếu ở Realistic Mode 0.01x thì cam phải zoom sát rạt)
+        float systemScale = (settings != null) ? settings.visualScaleMultiplier : 1f;
+        
+        targetDistance = baseScale * zoomMultiplier * systemScale;
+        
+        // Mở biên độ minDistance nhỏ hơn nữa để Realistic Mode có thể chúi sát đất cho Mặt Trăng
+        targetDistance = Mathf.Clamp(targetDistance, 0.001f, maxDistance);
     }
 
     void UpdateCameraPosition()

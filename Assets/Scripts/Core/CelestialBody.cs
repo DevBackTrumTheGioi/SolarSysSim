@@ -41,6 +41,10 @@ public class CelestialBody : MonoBehaviour
     [Tooltip("Tên hiển thị")]
     public string bodyName = "Unknown";
 
+    [Header("=== RELATIONSHIP TIER ===")]
+    [Tooltip("Khoá quỹ đạo theo hành tinh này (VD: Earth kéo Moon). Null nếu bay quanh Sun.")]
+    public Transform orbitParent;
+
     [Header("=== ROTATION ===")]
     [Tooltip("Độ nghiêng của trục tự quay so với mặt phẳng quỹ đạo (độ)")]
     public float axialTilt = 0f;
@@ -53,6 +57,9 @@ public class CelestialBody : MonoBehaviour
     [HideInInspector] public DoubleVector3 position;
     [HideInInspector] public DoubleVector3 velocity;
     [HideInInspector] public DoubleVector3 acceleration;
+
+    // Visual state
+    [HideInInspector] public float baseVisualScale = 1f;
 
     // ==================== TRAIL (LineRenderer custom) ====================
     private LineRenderer orbitLine;
@@ -110,14 +117,42 @@ public class CelestialBody : MonoBehaviour
     {
         if (settings != null && settings.mode == SimulationSettings.SimMode.GameFriendly)
         {
-            // Vector từ Mặt Trời đến hành tinh (physics)
-            DoubleVector3 relativePhysics = position - sunPhysicsPos;
-            DoubleVector3 visualOffset = settings.PhysicsToVisualPosition(relativePhysics);
-            transform.position = sunVisualPos + visualOffset.ToVector3();
+            if (orbitParent != null)
+            {
+                // Hành tinh vệ tinh (như Mặt trăng) -> cần phóng đại khoảng cách tương đối kẻo bị thụt vào trong lõi Mẹ
+                CelestialBody parentBody = orbitParent.GetComponent<CelestialBody>();
+                if (parentBody != null)
+                {
+                    // Khoảng cách Vật lý thực sự từ Vệ tinh -> Mẹ
+                    DoubleVector3 diffPhysics = position - parentBody.position;
+                    
+                    // Exaggerate khoảng cách biểu kiến này lên 60 lần để mặt trăng thoát ra khỏi bề mặt trái đất 3D
+                    float visualScalePump = 60f; 
+                    
+                    Vector3 parentVisual = parentBody.transform.position;
+                    Vector3 localVisualOffset = diffPhysics.ToVector3() * visualScalePump;
+                    
+                    transform.position = parentVisual + localVisualOffset;
+                }
+            }
+            else
+            {
+                // Hành tinh quay quanh mặt trời bình thường
+                DoubleVector3 relativePhysics = position - sunPhysicsPos;
+                DoubleVector3 visualOffset = settings.PhysicsToVisualPosition(relativePhysics);
+                transform.position = sunVisualPos + visualOffset.ToVector3();
+            }
         }
         else
         {
+            // Các hành tinh bay độc lập hoặc mode Realistic
             transform.position = position.ToVector3();
+        }
+
+        // === CẬP NHẬT KÍCH THƯỚC (SCALE) ĐỘNG (Real-time) ===
+        if (settings != null)
+        {
+            transform.localScale = Vector3.one * (baseVisualScale * settings.visualScaleMultiplier);
         }
     }
 
@@ -137,12 +172,40 @@ public class CelestialBody : MonoBehaviour
         orbitLine.enabled = settings.showOrbits;
 
         orbitLine.material = new Material(Shader.Find("Sprites/Default"));
-        orbitLine.startWidth = 0.04f;
-        orbitLine.endWidth = 0.01f;
-        orbitLine.startColor = new Color(orbitColor.r, orbitColor.g, orbitColor.b, 0f);
-        orbitLine.endColor = orbitColor;
-        orbitLine.numCornerVertices = 0;
-        orbitLine.numCapVertices = 0;
+        
+        // --- 1. Gradient Màu sắc tuyệt đẹp ---
+        // Đuôi (index 0) hoàn toàn trong suốt. Đầu (index 1) màu rực rỡ sáng chói.
+        Gradient gradient = new Gradient();
+        Color headColor = new Color(
+            Mathf.Min(1f, orbitColor.r + 0.3f), // Làm head sáng rực rỡ hơn tý
+            Mathf.Min(1f, orbitColor.g + 0.3f), 
+            Mathf.Min(1f, orbitColor.b + 0.3f)
+        );
+        gradient.SetKeys(
+            new GradientColorKey[] { 
+                new GradientColorKey(orbitColor, 0f), 
+                new GradientColorKey(orbitColor, 0.8f), 
+                new GradientColorKey(headColor, 1f) 
+            },
+            new GradientAlphaKey[] { 
+                new GradientAlphaKey(0f, 0f),     // Đuôi mờ tịt
+                new GradientAlphaKey(0.2f, 0.5f), // Giữa mờ dần
+                new GradientAlphaKey(1f, 1f)      // Đầu đặc
+            }
+        );
+        orbitLine.colorGradient = gradient;
+
+        // --- 2. Đường cong mượt độ dày (Width Curve) ---
+        // Giống đuôi sao chổi: Đuôi vuốt nhọn, Đầu hơi bầu bĩnh
+        AnimationCurve widthCurve = new AnimationCurve();
+        widthCurve.AddKey(new Keyframe(0f, 0f));
+        widthCurve.AddKey(new Keyframe(0.6f, 0.02f));
+        widthCurve.AddKey(new Keyframe(1f, 0.08f));
+        orbitLine.widthCurve = widthCurve;
+
+        // --- 3. Bo góc mượt (Smoothness) ---
+        orbitLine.numCornerVertices = 5; // Tránh hiện tượng gãy gập thành đường thẳng ở tốc độ cao
+        orbitLine.numCapVertices = 5;    // Bo tròn đầu cuối
         orbitLine.useWorldSpace = true;
         orbitLine.positionCount = 0;
 

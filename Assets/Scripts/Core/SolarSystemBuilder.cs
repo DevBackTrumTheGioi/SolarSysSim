@@ -183,6 +183,7 @@ public class SolarSystemBuilder : MonoBehaviour
         body.mass = data.mass;
         body.bodyRadius = data.radius;
         body.orbitColor = data.color;
+        body.baseVisualScale = data.visualScale; // Lưu scale gốc để tính toán live sau này
 
         // Lưu reference Sun
         if (data.name == "Sun")
@@ -193,22 +194,56 @@ public class SolarSystemBuilder : MonoBehaviour
         // === PHYSICS POSITIONS (khoảng cách THẬT - AU) ===
         float dist = (float)data.distanceFromSun;
         
-        // Tạo góc ngẫu nhiên trên quỹ đạo (thử dùng seed tự do, chỉ áp dụng nếu không phải Mặt Trời)
+        // Tách random angle
         float randomAngle = 0f;
         if (data.name != "Sun")
         {
             randomAngle = Random.Range(0f, 2f * Mathf.PI);
         }
 
+        // 1. Tính toán Toạ độ & Vận tốc ĐỘC LẬP TƯƠNG ĐỐI (Local Space) so với Mẹ
+        Vector3 localPos = Vector3.zero;
+        Vector3 localVel = Vector3.zero;
         if (orbitalPlaneXZ)
         {
-            body.initialPositionV3 = new Vector3(dist * Mathf.Cos(randomAngle), 0f, dist * Mathf.Sin(randomAngle));
-            body.initialVelocityV3 = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), 0f, (float)data.orbitalVelocity * Mathf.Cos(randomAngle));
+            localPos = new Vector3(dist * Mathf.Cos(randomAngle), 0f, dist * Mathf.Sin(randomAngle));
+            localVel = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), 0f, (float)data.orbitalVelocity * Mathf.Cos(randomAngle));
         }
         else
         {
-            body.initialPositionV3 = new Vector3(dist * Mathf.Cos(randomAngle), dist * Mathf.Sin(randomAngle), 0f);
-            body.initialVelocityV3 = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), (float)data.orbitalVelocity * Mathf.Cos(randomAngle), 0f);
+            localPos = new Vector3(dist * Mathf.Cos(randomAngle), dist * Mathf.Sin(randomAngle), 0f);
+            localVel = new Vector3(-(float)data.orbitalVelocity * Mathf.Sin(randomAngle), (float)data.orbitalVelocity * Mathf.Cos(randomAngle), 0f);
+        }
+
+        // 2. Chuyển đổi thành Toạ độ & Vận tốc TUYỆT ĐỐI (World Space) nếu có Mẹ
+        if (!string.IsNullOrEmpty(data.orbitParentName))
+        {
+            // Tìm Transform hoặc CelestialBody của hành tinh mẹ đã được sinh ra trước đó
+            Transform parentTransform = transform.Find(data.orbitParentName);
+            if (parentTransform != null)
+            {
+                body.orbitParent = parentTransform; // Hook Mẹ - Con để render offset sau này
+                
+                CelestialBody parentCelestial = parentTransform.GetComponent<CelestialBody>();
+                if (parentCelestial != null)
+                {
+                    // Lấy vị trí và vận tốc vật lý thực sự của Mẹ cộng dồn vào Con
+                    body.initialPositionV3 = parentCelestial.initialPositionV3 + localPos;
+                    body.initialVelocityV3 = parentCelestial.initialVelocityV3 + localVel;
+                }
+            }
+            else 
+            {
+                Debug.LogWarning($"[SolarSystemBuilder] Không tìm thấy hành tinh mẹ {data.orbitParentName} cho {data.name}. Rơi về toạ độ độc lập quanh mặt trời.");
+                body.initialPositionV3 = localPos;
+                body.initialVelocityV3 = localVel;
+            }
+        }
+        else 
+        {
+            // Hành tinh độc lập bay quanh Sun
+            body.initialPositionV3 = localPos;
+            body.initialVelocityV3 = localVel;
         }
 
         // === VISUAL POSITION (khoảng cách NÉN - Unity units) ===
