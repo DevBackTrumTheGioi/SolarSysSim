@@ -1,0 +1,66 @@
+# Bách Khoa Toàn Thư: Solar System N-Body Simulation
+*Tài liệu tổng hợp Kiến trúc, Thủ thuật và Xử lý Lỗi trong quá trình xây dựng Hệ Mặt Trời 3D.*
+
+---
+
+## 1. Kiến Trúc Cốt Lõi: Tách Biệt Thế Giới Tự Nhiên và Màn Hình Hiện Thị
+Vấn đề kinh điển của lập trình Không gian Vũ trụ là **Tỉ lệ (Scale)**. 
+Khoảng cách thực tế giữa các hành tinh lớn gấp hàng triệu lần bản thân kích thước của chúng. Nếu render đúng tỷ lệ 1:1, bạn sẽ chỉ thấy MỘT MÀN HÌNH ĐEN THUI vì các hành tinh quá bé lọt thỏm trong không gian.
+
+**Giải pháp:** Tách biệt thành 2 tầng dữ liệu (Dual-Layer Architecture).
+- **Physics Layer (Toán học):** Sử dụng `DoubleVector3` (Độ chính xác kép - Double Precision) cực kỳ cao để tính toán vị trí `position` theo định luật vạn vật hấp dẫn (Lực tỉ lệ nghịch với bình phương khoảng cách). Hoàn toàn dùng đơn vị chuẩn thiên văn `AU` và `AU/day`.
+- **Visual Layer (Đồ hoạ):** Hàm [PhysicsToVisualPosition()](file:///d:/Unity/Solar2/SolarSysSim/Assets/Scripts/Core/SimulationSettings.cs#137-153) dùng thuật toán *Power Compression* (Nén bằng Luỹ thừa, ví dụ `X^0.45`). Nó bóp ngắn các khoảng cách khổng lồ lại, nhưng vẫn giữ đúng thứ tự lớp màng và góc quay. Render hình ảnh bằng Vector3 (Float).
+
+**Kết quả:** Quỹ đạo bay hoàn toàn chính xác theo Toán học Kepler, nhưng màn hình máy tính vẫn hiển thị đẹp đẽ và lấp đầy bởi các hành tinh.
+
+---
+
+## 2. Các Thủ thuật Tích hợp Động Lực Học (Physics Integration)
+
+### Tích phân Velocity Verlet
+Thay vì dùng phương pháp Euler đơn giản (Cộng dồn Vận tốc vào Vị trí) gây sai số tích luỹ khiến quỹ đạo lệch văng ra ngoài, dự án dùng thuật toán **Velocity Verlet**:
+1. Cập nhật vị trí dựa trên vận tốc VÀ gia tốc hiện tại.
+2. Tính toán gia tốc mới cho bước tiếp theo.
+3. Cập nhật Vận tốc dựa trên trung bình cộng của gia tốc cũ và mới.
+**Lợi ích:** Cực kỳ ổn định cho N-Body, bảo toàn năng lượng hệ thống (Energy Conservation).
+
+### Đồng bộ Refresh Rate (Loại bỏ Jitter)
+Lỗi rách hình (Jitter/Stutter) khi Camera bám theo hành tinh quay nhanh xuất phát từ việc tính toán nằm trong `FixedUpdate` (50Hz) nhưng màn hình xuất ảnh ở frame rate linh hoạt (60-144Hz).
+**Cách gỡ:** Di dời vòng lặp Tích phân vật lý vào hàm [Update()](file:///d:/Unity/Solar2/SolarSysSim/Assets/Scripts/Core/GravitySimulation.cs#128-219), tính bước thời gian `dt` dựa trên `Time.deltaTime`. Khớp 1-1 với tần số quét của màn hình.
+
+---
+
+## 3. Quản Lý Hành Tinh Và Vệ Tinh (Hierarchy)
+
+### Spawning toạ độ
+Để thiết lập một hành tinh tự do quay tròn, ta cấp Vận tốc ban đầu **Vuông góc** với vector Vị trí của nó so với Mặt trời, và phân bố ngẫu nhiên góc `randomAngle` để cả Hệ Mặt Trời không phải xếp thành 1 hàng dọc nhàm chán lúc mới mở game.
+
+### Hệ thống Hành tinh Mẹ - Vệ tinh Con (Mặt trăng)
+Vật lý N-Body sẽ tự động khoá quỹ đạo của Mặt Trăng quanh Trái Đất nếu và chỉ nếu Mặt trăng ban đầu được chia sẻ **Toạ độ gốc của Trái Đất** và **Đà bay gốc của Trái Đất**.
+- Sửa thiết kế: Thêm trường `orbitParentName` vào cấu hình Hành tinh.
+- Tại [SolarSystemBuilder](file:///d:/Unity/Solar2/SolarSysSim/Assets/Scripts/Core/SolarSystemBuilder.cs#9-272), Vệ tinh sẽ quét tìm Mẹ và tiến hành cộng dồn vector.
+
+### Xử lý Xung đột Đồ hoạ (Visual Clipping)
+Ở chế độ Friendly Mode, Trái Đất vỏ 3D bị bơm to quá mức so với khoảng cách của Măt trăng, nếu vẽ như binh thường Mặt Trăng sẽ bị nuốt chửng vào trong lòng cầu.
+**Thủ thuật bù trừ:** Bóc riêng hàm [UpdateVisualPosition()](file:///d:/Unity/Solar2/SolarSysSim/Assets/Scripts/Core/CelestialBody.cs#108-159). Nếu là Vệ tĩnh, tính khoảng toán khoảng cách thực tế từ Vệ tinh -> Mẹ, rồi nhân vống một hằng số khuếch đại (`settings.distanceMultiplier * 300f`) để hất văng quả cầu 3D Mặt Trăng ra xa bề mặt Trái Đất nhằm thoả mãn thị giác.
+
+---
+
+## 4. Xử Lí Đồ hoạ Camera và Trail
+
+### Camera Near Clip Plane Bug
+Khi chuyển sang Realistic Mode, các hành tinh thu bé lại `0.01` lần. Zoom Camera lại quá sát sẽ đâm thủng lủng lưới đa giác (Vùng mù Near Clip Plane của Camera).
+**Cách khắc phục:** Can thiệp bằng code hạ giới hạn ép Camera nhìn cận cảnh từ `0.3` xuống `cam.nearClipPlane = 0.0001f`.
+
+### Glowing Trail (Quỹ đạo Phát sáng)
+Sử dụng `LineRenderer` thay vì component cỗ lỗ sĩ `TrailRenderer` của Unity. Tại vòng khởi tạo:
+1. Đùn Gradient Color từ đầu đến đuôi (Chóp đỉnh độ đục Alpha = 1, Đuôi chóp rớt về 0 mờ dần).
+2. Dùng AnimationCurve làm WidthCurve để bóp nhọn nhỏ đuôi tạo cảm giác sao chổi xé gió.
+
+---
+
+## 5. UI Tương tác Thời gian thực (Live Editing)
+Toàn bộ Editor được thiết kế tách rời hoàn toàn khái niệm Config và khái niệm Live Instance.
+- **Trọng lực:** Việc nhân `Gravity Multiplier` trực tiếp lồng vào hàm tính `Force` cho phép người chơi bóp nghẹt hệ mặt trời ngay lập tức.
+- **Visual Scale multiplier:** Vẫn giữ nguyên Scale vật gốc `baseVisualScale`. Mọi chỉnh sửa Size trên UI sẽ lập tức đè kích thước mới lên ở Frame của hàm Update, cho phép chuyển đổi chế độ Siêu to và Siêu nhỏ cực mượt không chớp hình thay vì phải Load lại Cảnh.
+- **Xoá Trail:** Khi người chơi đổi vận tốc, quỹ đạo cũ sẽ vô giá trị. Script chủ động đập tan array ghi nhớ của LineRenderer (`orbitLine.positionCount = 0`) để nó vẽ lại từ đầu.

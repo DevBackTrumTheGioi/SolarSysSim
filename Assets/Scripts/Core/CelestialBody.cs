@@ -153,6 +153,22 @@ public class CelestialBody : MonoBehaviour
         if (settings != null)
         {
             transform.localScale = Vector3.one * (baseVisualScale * settings.visualScaleMultiplier);
+
+            // Ẩn/hiện vệ tinh và trail dựa trên chế độ (Ẩn mặt trăng khi ở Friendly mode)
+            if (orbitParent != null)
+            {
+                bool isRealistic = settings.visualScaleMultiplier <= 0.05f;
+                // Ẩn model (Sphere) của vệ tinh bằng cách tắt MeshRenderer
+                MeshRenderer[] mrs = GetComponentsInChildren<MeshRenderer>();
+                foreach (var m in mrs) m.enabled = isRealistic;
+
+                if (orbitLine != null) orbitLine.enabled = isRealistic && settings.showOrbits;
+            }
+            else
+            {
+                // Các hành tinh bình thường thì vẫn tuân theo biến showOrbits chung
+                if (orbitLine != null) orbitLine.enabled = settings.showOrbits;
+            }
         }
     }
 

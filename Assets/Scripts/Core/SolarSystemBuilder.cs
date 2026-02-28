@@ -268,5 +268,53 @@ public class SolarSystemBuilder : MonoBehaviour
             DestroyImmediate(transform.GetChild(i).gameObject);
         }
     }
+
+    /// <summary>
+    /// Bọn nhện quăng "Hành tinh Lang thang" (Rogue Planet) siêu nặng vào hệ thống
+    /// </summary>
+    public void SpawnRoguePlanet()
+    {
+        string bodyName = "Rogue Planet";
+        GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        obj.name = bodyName;
+        obj.transform.parent = this.transform;
+
+        Renderer bodyRenderer = obj.GetComponent<Renderer>();
+        if (bodyRenderer != null)
+        {
+            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            mat.color = new Color(1f, 0.2f, 0.2f); // Màu Đỏ máu mộng tinh
+            mat.EnableKeyword("_EMISSION");
+            mat.SetColor("_EmissionColor", mat.color * 2f);
+            bodyRenderer.material = mat;
+        }
+
+        Collider col = obj.GetComponent<Collider>();
+        if (col != null) Destroy(col);
+
+        // Tạo Parameter
+        CelestialBody body = obj.AddComponent<CelestialBody>();
+        body.bodyName = bodyName;
+        // Siêu Khổng Lồ: Bằng Nửa Mặt Trời (kéo tuột quỹ đạo sao Mộc)
+        body.mass = 500.0; 
+        body.bodyRadius = 0.003; 
+        body.orbitColor = new Color(1f, 0.2f, 0.2f);
+        body.baseVisualScale = 0.5f; 
+
+        // Spawn ở rìa xa (50 AU) và bắn thẳng vào Tâm với Tốc độ Cực lớn
+        body.initialPositionV3 = new Vector3(30f, 0f, 30f); 
+        body.initialVelocityV3 = new Vector3(-0.5f, 0f, -0.5f); // 0.5 AU/ngày (Siêu thanh càn quét)
+
+        // Inject vào System
+        GravitySimulation gravSim = FindObjectOfType<GravitySimulation>();
+        if (gravSim != null)
+        {
+            gravSim.AddDynamicBody(body);
+        }
+        else 
+        {
+            Debug.LogError("Chưa tìm thấy GravitySimulation để thêm Rogue Planet");
+        }
+    }
 }
 

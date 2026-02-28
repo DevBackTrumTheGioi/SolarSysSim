@@ -37,8 +37,8 @@ public class SimulationUI : MonoBehaviour
         boxStyle.normal.background = bgTexture;
         
         // === SIMULATION INFO (top-left) ===
-        GUILayout.BeginArea(new Rect(10, 10, 320, 300));
-        GUI.Box(new Rect(0, 0, 320, 300), "", boxStyle); // Vẽ background xám phía sau nội dung
+        GUILayout.BeginArea(new Rect(10, 10, 320, 380));
+        GUI.Box(new Rect(0, 0, 320, 380), "", boxStyle); // Vẽ background xám phía sau nội dung
         GUILayout.Label("☀ Solar System Simulation", titleStyle);
         
         if (settings != null)
@@ -68,17 +68,16 @@ public class SimulationUI : MonoBehaviour
             if (GUILayout.Button("☄ Friendly Mode"))
             {
                 settings.visualScaleMultiplier = 0.55f;
-                settings.showOrbits = true;
-                UpdateOrbitLines(true);
             }
             if (GUILayout.Button("🔭 Realistic Mode"))
             {
-                settings.visualScaleMultiplier = 0.01f;
-                settings.showOrbits = false;
-                UpdateOrbitLines(false);
+                settings.visualScaleMultiplier = 0.05f;
             }
             GUILayout.EndHorizontal();
             
+            GUILayout.Space(5);
+            settings.showOrbits = GUILayout.Toggle(settings.showOrbits, " Show Orbits (Trails)");
+
             GUILayout.Space(5);
             settings.enableSunDrift = GUILayout.Toggle(settings.enableSunDrift, " Enable Sun Drift (Galaxy Motion)");
             if (settings.enableSunDrift)
@@ -88,6 +87,15 @@ public class SimulationUI : MonoBehaviour
             }
 
             GUILayout.Space(15);
+            GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
+            if (GUILayout.Button("☄️ Mời Gọi Kẻ Hủy Diệt (Rogue Planet)", GUILayout.Height(30)))
+            {
+                SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+                if (builder != null) builder.SpawnRoguePlanet();
+            }
+            GUI.backgroundColor = Color.white;
+
+            GUILayout.Space(5);
             if (GUILayout.Button("🔄 Reset Planets to Default", GUILayout.Height(25)))
             {
                 ResetAllPlanetsToDefault();
@@ -190,16 +198,6 @@ public class SimulationUI : MonoBehaviour
                 
                 GUILayout.EndArea();
             }
-        }
-    }
-
-    void UpdateOrbitLines(bool show)
-    {
-        CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
-        foreach (var body in allBodies)
-        {
-            LineRenderer lr = body.GetComponent<LineRenderer>();
-            if (lr != null) lr.enabled = show;
         }
     }
 

@@ -386,5 +386,33 @@ public class GravitySimulation : MonoBehaviour
                 bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
         }
     }
+
+    // ==================== DYNAMIC BODY INJECTION ====================
+    /// <summary>
+    /// Cho phép bơm nóng một thiên thể mới vào Simulation đang chạy mà không cần Reset
+    /// </summary>
+    public void AddDynamicBody(CelestialBody newBody)
+    {
+        // Resize array safely
+        int newSize = bodyCount + 1;
+        
+        CelestialBody[] newBodies = new CelestialBody[newSize];
+        for (int i = 0; i < bodyCount; i++) newBodies[i] = bodies[i];
+        newBodies[bodyCount] = newBody;
+        bodies = newBodies;
+
+        DoubleVector3[] newAcc = new DoubleVector3[newSize];
+        for (int i = 0; i < bodyCount; i++) newAcc[i] = newAccelerations[i];
+        newAccelerations = newAcc;
+
+        bodyCount = newSize;
+
+        // Khởi tạo trạng thái ban đầu cho hành tinh mới
+        newBody.Initialize();
+        newBody.SetupTrail(settings);
+        newBody.SetOrbitMaxPoints(CalcOrbitPoints(newBody));
+        
+        Debug.Log($"[GravitySimulation] Dynamically injected {newBody.bodyName}. Total bodies: {bodyCount}");
+    }
 }
 

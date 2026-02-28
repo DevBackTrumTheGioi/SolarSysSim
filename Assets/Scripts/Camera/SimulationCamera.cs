@@ -49,6 +49,12 @@ public class SimulationCamera : MonoBehaviour
         currentDistance = 20f;
         targetDistance = 20f;
         rotationX = 60f;
+
+        Camera cam = GetComponent<Camera>();
+        if (cam != null)
+        {
+            cam.nearClipPlane = 0.0001f;
+        }
     }
 
     void LateUpdate()
@@ -177,7 +183,8 @@ public class SimulationCamera : MonoBehaviour
         float zoomMultiplier = (body.bodyName == "Sun") ? 4f : 3f;
         
         // Cân nhắc theo tỷ lệ hệ thống (Nếu ở Realistic Mode 0.01x thì cam phải zoom sát rạt)
-        float systemScale = (settings != null) ? settings.visualScaleMultiplier : 1f;
+        // Lưu ý: Mặt Trời không bị ảnh hưởng bởi visualScaleMultiplier, nên bỏ qua systemScale nếu đang focus Sun.
+        float systemScale = (settings != null && body.bodyName != "Sun") ? settings.visualScaleMultiplier : 1f;
         
         targetDistance = baseScale * zoomMultiplier * systemScale;
         

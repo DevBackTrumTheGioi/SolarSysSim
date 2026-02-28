@@ -14,15 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mode: 1
   gravitationalConstant: 0.00029592
-  timeScale: 0.05
+  timeScale: 40
   gravityMultiplier: 1
   subSteps: 5
   softeningFactor: 0.000000001
   baseDistance: 1.5
-  distanceMultiplier: 6
+  distanceMultiplier: 5
   compressionPower: 0.45
-  showOrbits: 0
-  visualScaleMultiplier: 0.05
-  trailDuration: 0.1
-  enableSunDrift: 0
+  showOrbits: 1
+  visualScaleMultiplier: 0.55
+  trailDuration: 0.03
+  enableSunDrift: 1
   sunDriftSpeed: 0.051948052
