@@ -59,6 +59,14 @@ public class SimulationSettings : ScriptableObject
     [Range(0.1f, 10f)]
     public float gravityMultiplier = 1.0f;
 
+    [Header("=== PHYSICS & COLLISION ===")]
+    [Tooltip("Bật tắt tính năng Sáp nhập Hành tinh khi va chạm. (Cẩn thận trong Friendly Mode)")]
+    public bool enableCollisions = false;
+
+    [Header("=== COSMIC EVENTS ===")]
+    [Tooltip("Khối lượng (Solar Mass) tối thiểu để một thiên thể suy sụp thành Lỗ Đen")]
+    public double blackHoleMassThreshold = 30.0;
+
     [Tooltip("Số sub-steps per FixedUpdate. Tăng = chính xác hơn, nặng hơn. 4-8 là tốt.")]
     [Range(1, 32)]
     public int subSteps = 4;

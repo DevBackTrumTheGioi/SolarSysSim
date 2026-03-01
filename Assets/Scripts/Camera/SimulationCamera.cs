@@ -38,11 +38,9 @@ public class SimulationCamera : MonoBehaviour
     public float smoothSpeed = 8f;
 
     private Vector3 targetPosition;
-    private CelestialBody[] allBodies;
 
     void Start()
     {
-        allBodies = FindObjectsOfType<CelestialBody>();
         targetPosition = Vector3.zero;
 
         // Vị trí ban đầu: nhìn từ trên xuống, zoom vừa đủ thấy toàn bộ hệ
@@ -118,11 +116,12 @@ public class SimulationCamera : MonoBehaviour
         // === RESET: Space ===
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            if (allBodies != null)
+            CelestialBody[] currentBodies = FindObjectsOfType<CelestialBody>();
+            if (currentBodies != null)
             {
-                foreach (var body in allBodies)
+                foreach (var body in currentBodies)
                 {
-                    if (body.bodyName == "Sun")
+                    if (body != null && body.bodyName == "Sun")
                     {
                         target = body.transform;
                         break;
@@ -153,7 +152,8 @@ public class SimulationCamera : MonoBehaviour
 
     void SelectBody(int index)
     {
-        if (allBodies == null) return;
+        CelestialBody[] currentBodies = FindObjectsOfType<CelestialBody>();
+        if (currentBodies == null) return;
 
         // Tìm body theo tên (vì FindObjectsOfType không đảm bảo thứ tự)
         string[] names = { "Sun", "Mercury", "Venus", "Earth", "Mars", 
@@ -161,9 +161,9 @@ public class SimulationCamera : MonoBehaviour
         
         if (index >= names.Length) return;
 
-        foreach (var body in allBodies)
+        foreach (var body in currentBodies)
         {
-            if (body.bodyName == names[index])
+            if (body != null && body.bodyName == names[index])
             {
                 FocusOnBody(body);
                 return;
@@ -195,12 +195,14 @@ public class SimulationCamera : MonoBehaviour
     void UpdateCameraPosition()
     {
         // Target position: follow selected body or origin
-        if (target != null)
+        if (target != null && target.gameObject != null && target.gameObject.activeInHierarchy)
         {
             targetPosition = Vector3.Lerp(targetPosition, target.position, Time.deltaTime * smoothSpeed);
         }
-        else
+        else 
         {
+            // Nếu target bị destroy hoặc inactive (e.g. bị nuốt), nhả target ra
+            target = null;
             // Khi target == null, targetPosition do WASD điều khiển trực tiếp
         }
 

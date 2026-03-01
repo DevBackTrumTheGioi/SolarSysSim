@@ -81,7 +81,7 @@ public class SolarSystemBuilder : MonoBehaviour
     /// Tạo Directional Light phát từ vị trí Mặt Trời.
     /// Ánh sáng chiếu ra mọi hướng (mô phỏng ánh sáng Mặt Trời).
     /// </summary>
-    private void CreateSunLight()
+    public void CreateSunLight()
     {
         // Xóa Directional Light mặc định nếu có
         Light[] existingLights = FindObjectsOfType<Light>();
@@ -169,8 +169,12 @@ public class SolarSystemBuilder : MonoBehaviour
             Debug.LogWarning($"[SolarSystemBuilder] Prefab not found for {data.name}, using sphere fallback.");
         }
 
-        // Visual scale
-        float scale = data.visualScale * (settings != null ? settings.visualScaleMultiplier : 1f);
+        // Visual scale (Mặt Trời không bị ảnh hưởng bởi hệ số thu nhỏ biểu kiến)
+        float scale = data.visualScale;
+        if (data.name != "Sun" && settings != null)
+        {
+            scale *= settings.visualScaleMultiplier;
+        }
         obj.transform.localScale = Vector3.one * scale;
 
         // Xóa Collider (không cần physics collision trong simulation)
@@ -270,6 +274,16 @@ public class SolarSystemBuilder : MonoBehaviour
     }
 
     /// <summary>
+    /// Gọi để tái tạo hoàn toàn Cấu trúc Hệ mặt trời nguyên bản
+    /// </summary>
+    public void RebuildSystem()
+    {
+        ClearAll();
+        BuildSolarSystem();
+        CreateSunLight();
+    }
+
+    /// <summary>
     /// Bọn nhện quăng "Hành tinh Lang thang" (Rogue Planet) siêu nặng vào hệ thống
     /// </summary>
     public void SpawnRoguePlanet()
@@ -314,6 +328,122 @@ public class SolarSystemBuilder : MonoBehaviour
         else 
         {
             Debug.LogError("Chưa tìm thấy GravitySimulation để thêm Rogue Planet");
+        }
+    }
+
+    /// <summary>
+    /// Triệu hồi Bão Thiên Thạch đục khoét hệ mặt trời
+    /// </summary>
+    public void SpawnMeteorSwarm()
+    {
+        GravitySimulation gravSim = FindObjectOfType<GravitySimulation>();
+        if (gravSim == null) return;
+
+        int meteorCount = 20;
+        float spawnRadius = 35f; // AU (Biên giới xa)
+
+        for (int i = 0; i < meteorCount; i++)
+        {
+            string bodyName = "Meteor " + i;
+            GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            obj.name = bodyName;
+            obj.transform.parent = this.transform;
+
+            Renderer bodyRenderer = obj.GetComponent<Renderer>();
+            if (bodyRenderer != null)
+            {
+                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                mat.color = new Color(0.6f, 0.6f, 0.65f); // Đá xám
+                bodyRenderer.material = mat;
+            }
+
+            Collider col = obj.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            CelestialBody body = obj.AddComponent<CelestialBody>();
+            body.bodyName = bodyName;
+            // Thiên thạch thì khối lượng siêu bé gọn nhẹ
+            body.mass = Random.Range(0.001f, 0.05f); 
+            body.bodyRadius = Random.Range(0.0001f, 0.0005f); 
+            body.orbitColor = new Color(0.7f, 0.7f, 0.7f, 0.5f);
+            body.baseVisualScale = 0.1f; 
+
+            // Random điểm xuất phát trên Vòng móng ngựa bao quanh Hệ (khoảng 35AU)
+            float angle = Random.Range(0f, Mathf.PI * 2f);
+            float height = Random.Range(-5f, 5f);
+            Vector3 spawnPos = new Vector3(Mathf.Cos(angle) * spawnRadius, height, Mathf.Sin(angle) * spawnRadius);
+            body.initialPositionV3 = spawnPos;
+
+            // Chỉnh góc Cắm Đầu vào Tâm (Mặt Trời). Cộng thêm sai số nhiễu cho sinh động.
+            Vector3 aimDir = -spawnPos.normalized;
+            Vector3 scatter = Random.insideUnitSphere * 0.15f; 
+            Vector3 velocityDir = (aimDir + scatter).normalized;
+            
+            float speed = Random.Range(0.2f, 0.8f); // AU/ngày (~ siêu thanh)
+            body.initialVelocityV3 = velocityDir * speed;
+
+            gravSim.AddDynamicBody(body);
+        }
+    }
+
+    /// <summary>
+    /// Triệu hồi Bão Thiên Thạch dội bom tập trung vào một Cụm Hành Tinh mục tiêu
+    /// </summary>
+    public void SpawnTargetedMeteorSwarm(CelestialBody targetBody)
+    {
+        if (targetBody == null) return;
+        
+        GravitySimulation gravSim = FindObjectOfType<GravitySimulation>();
+        if (gravSim == null) return;
+
+        int meteorCount = 25;
+        float spawnRadius = 2.5f; // AU (Tạo ra khá gần nạn nhân để đảm bảo tỷ lệ trúng)
+        Vector3 targetPos = targetBody.initialPositionV3; // Dùng vị trí khởi tạo làm gốc hoặc lấy vị trí hiện tại
+        
+        // Để nhắm trúng thì ta lấy vị trí hiện tại trên lưới Physics của nó thay vì initialPositionV3
+        targetPos = targetBody.position.ToVector3();
+
+        for (int i = 0; i < meteorCount; i++)
+        {
+            string bodyName = "Targeted Meteor " + i;
+            GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            obj.name = bodyName;
+            obj.transform.parent = this.transform;
+
+            Renderer bodyRenderer = obj.GetComponent<Renderer>();
+            if (bodyRenderer != null)
+            {
+                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                mat.color = new Color(0.8f, 0.4f, 0.1f); // Đá rực lửa đỏ
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", mat.color * 1.5f);
+                bodyRenderer.material = mat;
+            }
+
+            Collider col = obj.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            CelestialBody body = obj.AddComponent<CelestialBody>();
+            body.bodyName = bodyName;
+            body.mass = Random.Range(0.005f, 0.1f);  // Lớn hơn xíu để tăng độ tàn phá
+            body.bodyRadius = Random.Range(0.0002f, 0.0008f); 
+            body.orbitColor = new Color(1f, 0.5f, 0f, 0.6f);
+            body.baseVisualScale = 0.15f; 
+
+            // Random điểm xuất phát dạng Cloud xoay quanh Nạn Nhân
+            Vector3 randomOffset = Random.onUnitSphere * spawnRadius;
+            Vector3 spawnPos = targetPos + randomOffset;
+            body.initialPositionV3 = spawnPos;
+
+            // Chỉnh góc Cắm Đầu vào Nạn Nhân
+            Vector3 aimDir = (targetPos - spawnPos).normalized;
+            Vector3 scatter = Random.insideUnitSphere * 0.05f; // Sai số nhỏ để đạn chụm lại
+            Vector3 velocityDir = (aimDir + scatter).normalized;
+            
+            float speed = Random.Range(0.5f, 1.5f); // AU/ngày (Siêu tốc độ vũ trụ)
+            body.initialVelocityV3 = velocityDir * speed;
+
+            gravSim.AddDynamicBody(body);
         }
     }
 }

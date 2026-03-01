@@ -40,6 +40,9 @@ public class CelestialBody : MonoBehaviour
 
     [Tooltip("Tên hiển thị")]
     public string bodyName = "Unknown";
+    
+    [Tooltip("Trạng thái Lỗ Đen (Chỉ hiển thị)")]
+    public bool isBlackHole { get; private set; } = false;
 
     [Header("=== RELATIONSHIP TIER ===")]
     [Tooltip("Khoá quỹ đạo theo hành tinh này (VD: Earth kéo Moon). Null nếu bay quanh Sun.")]
@@ -152,7 +155,16 @@ public class CelestialBody : MonoBehaviour
         // === CẬP NHẬT KÍCH THƯỚC (SCALE) ĐỘNG (Real-time) ===
         if (settings != null)
         {
-            transform.localScale = Vector3.one * (baseVisualScale * settings.visualScaleMultiplier);
+            // Giữ Mặt Trời luôn to và có thể nhìn rõ dù ở Realistic Mode
+            if (bodyName == "Sun") 
+            {
+                transform.localScale = Vector3.one * baseVisualScale;
+            }
+            else
+            {
+                float currentScaleMulti = settings.visualScaleMultiplier;
+                transform.localScale = Vector3.one * (baseVisualScale * currentScaleMulti);
+            }
 
             // Ẩn/hiện vệ tinh và trail dựa trên chế độ (Ẩn mặt trăng khi ở Friendly mode)
             if (orbitParent != null)
@@ -327,4 +339,88 @@ public class CelestialBody : MonoBehaviour
     }
 
     public void SetTrailDuration(float duration) { }
+
+    // ==================== COLLISION VISUAL EFFECTS ====================
+    /// <summary>
+    /// Hiệu ứng phát sáng bốc cháy khi hấp thụ khối lượng từ vụ va chạm
+    /// </summary>
+    public void TriggerCollisionVFX(double victimMass)
+    {
+        // Tính toán cường độ sáng dựa trên tỉ lệ nạn nhân (victim càng to càng sáng)
+        float intensity = Mathf.Clamp((float)(victimMass / mass) * 3f + 1f, 1f, 5f);
+        StartCoroutine(HeatUpAndCoolDownVFX(intensity));
+    }
+
+    private System.Collections.IEnumerator HeatUpAndCoolDownVFX(float intensity)
+    {
+        Renderer bodyRenderer = GetComponent<Renderer>();
+        if (bodyRenderer == null) yield break;
+
+        Material mat = bodyRenderer.material;
+        mat.EnableKeyword("_EMISSION");
+        
+        // Màu lửa đỏ cam cực gắt ở lõi
+        Color fieryColor = new Color(1f, 0.4f, 0.1f) * intensity * 2f; 
+        
+        // Đoạn 1: Bùng nổ nhiệt độ (Flash) - 0.2s
+        float time = 0;
+        while (time < 0.2f)
+        {
+            time += Time.deltaTime;
+            mat.SetColor("_EmissionColor", Color.Lerp(Color.black, fieryColor, time / 0.2f));
+            yield return null;
+        }
+
+        // Đoạn 2: Nguội lạnh dần (Cooldown) - 3s đến 5s tùy độ lớn vụ nổ
+        time = 0;
+        float coolDownDuration = intensity * 1.5f;
+        while (time < coolDownDuration)
+        {
+            time += Time.deltaTime;
+            mat.SetColor("_EmissionColor", Color.Lerp(fieryColor, Color.black, time / coolDownDuration));
+            yield return null;
+        }
+
+        // Tắt Emission nếu không phải Mặt Trời và không phải Lỗ Đen
+        if (bodyName != "Sun" && !isBlackHole)
+        {
+            mat.DisableKeyword("_EMISSION");
+        }
+    }
+
+    // ==================== BLACK HOLE MECHANICS ====================
+    /// <summary>
+    /// Kiểm tra nếu khối lượng vượt ngưỡng sẽ kích hoạt sự kiện sụp đổ thành Lỗ Đen (Chandrasekhar Limit)
+    /// </summary>
+    public void CheckBlackHole(SimulationSettings settings)
+    {
+        if (!isBlackHole && mass >= settings.blackHoleMassThreshold)
+        {
+            // Tiến trình sụp đổ thành Lỗ Đen
+            isBlackHole = true;
+            bodyName = "Black Hole";
+            
+            // 1. Áo khoác Hắc ín (Visuals)
+            Renderer bodyRenderer = GetComponent<Renderer>();
+            if (bodyRenderer != null)
+            {
+                Material mat = bodyRenderer.material;
+                mat.color = Color.black;
+                mat.DisableKeyword("_EMISSION");
+            }
+            
+            // 2. Trail Bóng tối (Quỹ đạo màu đen hoặc tàng hình)
+            orbitColor = new Color(0.1f, 0f, 0.2f); // Hơi ánh tím đen
+            if (orbitLine != null)
+            {
+                orbitLine.startColor = orbitColor;
+                orbitLine.endColor = Color.clear;
+            }
+            
+            // 3. Scale nhỏ lại tẹo tạo cảm giác đặc khối đặc
+            baseVisualScale *= 0.5f;
+
+            Debug.LogWarning($"[COSMIC EVENT] Một thiên thể vừa suy sụp thành Black Hole do khối lượng đạt {mass:F2} M☉");
+        }
+    }
 }

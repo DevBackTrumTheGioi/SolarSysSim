@@ -17,7 +17,13 @@ public class StarfieldBackground : MonoBehaviour
     [Tooltip("Bán kính màng cầu sao bao quanh camera (phải lớn hơn max camera zoom)")]
     public float starDistance = 500f; 
 
+    [Header("=== SHOOTING STARS ===")]
+    public bool enableShootingStars = true;
+    public int shootingStarCount = 50;
+    public float shootingStarSpeed = 200f;
+
     private ParticleSystem particleSys;
+    private ParticleSystem shootingParticleSys;
     private ParticleSystem.Particle[] stars;
     private Transform starTransform;
 
@@ -47,6 +53,40 @@ public class StarfieldBackground : MonoBehaviour
 
         stars = new ParticleSystem.Particle[maxStars];
         CreateStars();
+
+        // TẠO HỆ THỐNG SAO BĂNG (Shooting Stars / Flying Stars)
+        if (enableShootingStars)
+        {
+            GameObject sObj = new GameObject("ShootingStars");
+            sObj.transform.parent = starObj.transform;
+            shootingParticleSys = sObj.AddComponent<ParticleSystem>();
+            
+            var sMain = shootingParticleSys.main;
+            sMain.loop = true;
+            sMain.playOnAwake = true;
+            sMain.simulationSpace = ParticleSystemSimulationSpace.Local;
+            sMain.maxParticles = shootingStarCount;
+            sMain.startSpeed = new ParticleSystem.MinMaxCurve(shootingStarSpeed * 0.5f, shootingStarSpeed);
+            sMain.startLifetime = new ParticleSystem.MinMaxCurve(2f, 6f);
+            sMain.startSize = new ParticleSystem.MinMaxCurve(starSize * 0.5f, starSize * 2f);
+            sMain.startColor = new Color(0.85f, 0.95f, 1f, 0.7f);
+
+            var sEmission = shootingParticleSys.emission;
+            sEmission.enabled = true;
+            sEmission.rateOverTime = shootingStarCount / 3f;
+
+            var sShape = shootingParticleSys.shape;
+            sShape.enabled = true;
+            sShape.shapeType = ParticleSystemShapeType.Sphere;
+            sShape.radius = starDistance * 1.2f;
+
+            var sRenderer = shootingParticleSys.GetComponent<ParticleSystemRenderer>();
+            sRenderer.material = pRenderer.material; // Dùng chung material đốm sáng
+            sRenderer.renderMode = ParticleSystemRenderMode.Stretch; // Kéo dãn theo chiều dọc (vệt sao lướt)
+            sRenderer.lengthScale = 5f; 
+
+            shootingParticleSys.Play();
+        }
     }
 
     void CreateStars()

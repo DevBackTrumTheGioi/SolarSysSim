@@ -48,7 +48,7 @@ public class GravitySimulation : MonoBehaviour
 
     // Cached references
     private CelestialBody[] bodies;
-    private CelestialBody sunBody; // Tham chiếu Mặt Trời để làm gốc visual
+    public CelestialBody sunBody { get; private set; } // Tham chiếu Mặt Trời để làm gốc visual
     private bool isInitialized = false;
 
     // Pre-allocated arrays to avoid GC
@@ -141,6 +141,11 @@ public class GravitySimulation : MonoBehaviour
         for (int step = 0; step < dynamicSubSteps; step++)
         {
             VelocityVerletStep(subDt);
+            // Chỉ cho phép va chạm ở chế độ Realistic (Scale hiển thị rất nhỏ) để tránh lỗi lồng đồ hoạ
+            if (settings.enableCollisions && settings.visualScaleMultiplier <= 0.06f)
+            {
+                HandleCollisions(subDt);
+            }
         }
 
         // === SUN DRIFT: Dịch TẤT CẢ bodies lên trên trục Y cùng tốc độ ===
@@ -272,6 +277,157 @@ public class GravitySimulation : MonoBehaviour
             body.velocity = body.velocity + (body.acceleration + newAccelerations[i]) * halfDt;
             body.acceleration = newAccelerations[i];
         }
+    }
+
+    /// <summary>
+    /// Va chạm Không đàn hồi (Inelastic Collision): Sáp nhập khối lượng và Động lượng
+    /// Ngăn chặn Tunneling bằng cách quét va chạm liên tục trên đường thẳng Vector vận tốc.
+    /// </summary>
+    private void HandleCollisions(double dt)
+    {
+        bool hasCollisions = false;
+
+        for (int i = 0; i < bodyCount; i++)
+        {
+            for (int j = i + 1; j < bodyCount; j++)
+            {
+                CelestialBody bodyA = bodies[i];
+                CelestialBody bodyB = bodies[j];
+
+                if (bodyA == null || bodyB == null) continue;
+
+                // 1. Kiểm tra Va chạm Không gian hiện tại (Standard Sphere Overlap)
+                double minDistance = bodyA.bodyRadius + bodyB.bodyRadius;
+                
+                // MỞ RỘNG HITBOX CHO THIÊN THẠCH (Tránh lọt đạn khi vận tốc quá cao do bán kính thiên thạch và trái đất quá bé trong môi trường Toán Học AU)
+                if (bodyA.mass < 0.2 || bodyB.mass < 0.2)
+                {
+                    minDistance *= 150.0; // Tăng hitbox lên 150 lần cho các vật thể nhỏ
+                }
+
+                double currentDistSqr = (bodyA.position - bodyB.position).sqrMagnitude;
+
+                bool isColliding = currentDistSqr <= minDistance * minDistance;
+
+                // 2. Continuous Collision Detection (CCD) chống lọt Tunneling
+                // Tính khoảng cách gần nhất trong khung hình hiện tại thông qua vector vận tốc tương đối
+                if (!isColliding)
+                {
+                    DoubleVector3 relPos = bodyA.position - bodyB.position;
+                    DoubleVector3 relVel = bodyA.velocity - bodyB.velocity;
+                    double a = relVel.sqrMagnitude;
+                    
+                    if (a > 0.000001) // Có di chuyển
+                    {
+                        double b = 2.0 * DoubleVector3.Dot(relPos, relVel);
+                        double c = relPos.sqrMagnitude - minDistance * minDistance;
+
+                        // Giải PT bậc 2: at^2 + bt + c = 0 tìm thời điểm cắt nhau trong dt
+                        double discriminant = b * b - 4 * a * c;
+                        if (discriminant >= 0)
+                        {
+                            double t1 = (-b - System.Math.Sqrt(discriminant)) / (2 * a);
+                            double t2 = (-b + System.Math.Sqrt(discriminant)) / (2 * a);
+
+                            // Nếu cắt nhau TỪNG XẢY RA trong timestep dt này
+                            if ((t1 >= 0 && t1 <= dt) || (t2 >= 0 && t2 <= dt))
+                            {
+                                isColliding = true;
+                            }
+                        }
+                    }
+                }
+
+                // Tiền Tín hành Sáp nhập
+                if (isColliding)
+                {
+                    hasCollisions = true;
+
+                    CelestialBody survivor, victim;
+                    
+                    // Sun luôn là Kẻ sống sót nếu va chạm, ngược lại tính theo Mass
+                    if (bodyA == sunBody) { survivor = bodyA; victim = bodyB; }
+                    else if (bodyB == sunBody) { survivor = bodyB; victim = bodyA; }
+                    else if (bodyA.mass >= bodyB.mass) { survivor = bodyA; victim = bodyB; }
+                    else { survivor = bodyB; victim = bodyA; }
+
+                    // A. Toán học Sáp nhập: Bảo toàn Động lượng Inelastic
+                    // v' = (m1*v1 + m2*v2) / (m1+m2)
+                    double totalMass = survivor.mass + victim.mass;
+                    DoubleVector3 newVelocity = (survivor.velocity * survivor.mass + victim.velocity * victim.mass) / totalMass;
+                    
+                    // B. Tăng thể tích kẻ sống sót (Thể tích ~ Bán kính mũ 3) -> Radius ~ Căn bậc 3 của Mass mới
+                    double radiusScaleFactor = System.Math.Pow(totalMass / survivor.mass, 1.0 / 3.0);
+                    
+                    survivor.mass = totalMass;
+                    survivor.velocity = newVelocity;
+                    survivor.bodyRadius *= radiusScaleFactor;
+                    
+                    if (settings != null) survivor.CheckBlackHole(settings);
+                    
+                    // Lên kịch bản Graphic cho kẻ chiến thắng phát sáng lên
+                    survivor.TriggerCollisionVFX(victim.mass);
+                    
+                    // Trừ khử Victim ra khỏi danh sách logic
+                    victim.mass = 0.0; 
+                    victim.gameObject.SetActive(false); // Ẩn đi chờ Delete
+                    Destroy(victim.gameObject);
+                }
+            }
+        }
+
+        // Tái cấu trúc Mảng Physics nếu có Hành tinh biến mất
+        if (hasCollisions)
+        {
+            RebuildArraysAfterCollision();
+        }
+    }
+
+    /// <summary>
+    /// Xóa các body rỗng khỏi array và co ngắn mảng tính toán lại (O(N))
+    /// </summary>
+    private void RebuildArraysAfterCollision()
+    {
+        int activeCount = 0;
+        for(int i = 0; i < bodyCount; i++)
+        {
+            if(bodies[i] != null && bodies[i].mass > 0)
+            {
+                activeCount++;
+            }
+        }
+
+        CelestialBody[] activeBodies = new CelestialBody[activeCount];
+        DoubleVector3[] activeAcc = new DoubleVector3[activeCount];
+
+        int index = 0;
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i] != null && bodies[i].mass > 0)
+            {
+                activeBodies[index] = bodies[i];
+                activeAcc[index] = newAccelerations[i];
+                index++;
+            }
+        }
+
+        bodies = activeBodies;
+        newAccelerations = activeAcc;
+        bodyCount = activeCount;
+        
+        Debug.Log($"[GravitySimulation] Mảng được nén sau va chạm. Bodies còn lại: {bodyCount}");
+    }
+
+    /// <summary>
+    /// Xóa một hành tinh khỏi mô phỏng một cách an toàn.
+    /// </summary>
+    public void RemoveBody(CelestialBody bodyToRemove)
+    {
+        if (bodyToRemove == null || bodies == null) return;
+        bodyToRemove.mass = 0.0;
+        bodyToRemove.gameObject.SetActive(false);
+        Destroy(bodyToRemove.gameObject);
+        RebuildArraysAfterCollision();
     }
 
     /// <summary>

@@ -17,6 +17,7 @@ public class SimulationUI : MonoBehaviour
     private CelestialBody currentEditingBody;
     private string editMassStr = "1.0";
     private string editVelocityStr = "29.78";
+    private string editDistanceStr = "";
 
     void OnGUI()
     {
@@ -37,8 +38,8 @@ public class SimulationUI : MonoBehaviour
         boxStyle.normal.background = bgTexture;
         
         // === SIMULATION INFO (top-left) ===
-        GUILayout.BeginArea(new Rect(10, 10, 320, 380));
-        GUI.Box(new Rect(0, 0, 320, 380), "", boxStyle); // Vẽ background xám phía sau nội dung
+        GUILayout.BeginArea(new Rect(10, 10, 320, 480));
+        GUI.Box(new Rect(0, 0, 320, 480), "", boxStyle); // Vẽ background xám phía sau nội dung
         GUILayout.Label("☀ Solar System Simulation", titleStyle);
         
         if (settings != null)
@@ -79,6 +80,9 @@ public class SimulationUI : MonoBehaviour
             settings.showOrbits = GUILayout.Toggle(settings.showOrbits, " Show Orbits (Trails)");
 
             GUILayout.Space(5);
+            settings.enableCollisions = GUILayout.Toggle(settings.enableCollisions, " Enable Physics Collisions");
+
+            GUILayout.Space(5);
             settings.enableSunDrift = GUILayout.Toggle(settings.enableSunDrift, " Enable Sun Drift (Galaxy Motion)");
             if (settings.enableSunDrift)
             {
@@ -86,16 +90,24 @@ public class SimulationUI : MonoBehaviour
                 settings.sunDriftSpeed = GUILayout.HorizontalSlider(settings.sunDriftSpeed, 0f, 0.2f);
             }
 
-            GUILayout.Space(15);
+
             GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
             if (GUILayout.Button("☄️ Mời Gọi Kẻ Hủy Diệt (Rogue Planet)", GUILayout.Height(30)))
             {
                 SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
                 if (builder != null) builder.SpawnRoguePlanet();
             }
-            GUI.backgroundColor = Color.white;
 
             GUILayout.Space(5);
+            GUI.backgroundColor = new Color(0.7f, 0.7f, 0.7f);
+            if (GUILayout.Button("🌧 Triệu Hỏi Mưa Thiên Thạch", GUILayout.Height(30)))
+            {
+                SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+                if (builder != null) builder.SpawnMeteorSwarm();
+            }
+            GUI.backgroundColor = Color.white;
+
+            GUILayout.Space(15);
             if (GUILayout.Button("🔄 Reset Planets to Default", GUILayout.Height(25)))
             {
                 ResetAllPlanetsToDefault();
@@ -143,13 +155,13 @@ public class SimulationUI : MonoBehaviour
             simulation.ResetSimulation();
 
         // === SELECTED BODY INFO (right-center) ===
-        if (simCamera != null && simCamera.target != null)
+        if (simCamera != null && simCamera.target != null && simCamera.target.gameObject != null && simCamera.target.gameObject.activeInHierarchy)
         {
             CelestialBody selected = simCamera.target.GetComponent<CelestialBody>();
             if (selected != null)
             {
                 float infoWidth = 320f;
-                float infoHeight = 220f;
+                float infoHeight = 265f;
                 float infoX = Screen.width - infoWidth - 20f;
                 float infoY = (Screen.height - infoHeight) / 2f;
 
@@ -173,6 +185,12 @@ public class SimulationUI : MonoBehaviour
                     editMassStr = selected.mass.ToString("E3"); // Khoa học (ex: 3.003E-006)
                     double speedKmS_init = selected.velocity.magnitude * 1731.5;
                     editVelocityStr = speedKmS_init.ToString("F2");
+                    
+                    DoubleVector3 sunPos = default;
+                    if (simulation != null && simulation.sunBody != null)
+                        sunPos = simulation.sunBody.position;
+                    
+                    editDistanceStr = (selected.position - sunPos).magnitude.ToString("F4");
                 }
                 
                 // === EDIT MASS ===
@@ -187,14 +205,35 @@ public class SimulationUI : MonoBehaviour
                 editVelocityStr = GUILayout.TextField(editVelocityStr);
                 GUILayout.EndHorizontal();
                 
-                double distFromSun = selected.position.magnitude;
-                GUILayout.Label($"  Distance from Sun: {distFromSun:F4} AU");
+                // === EDIT DISTANCE ===
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("  Distance/Spawn(AU):", GUILayout.Width(130));
+                editDistanceStr = GUILayout.TextField(editDistanceStr);
+                GUILayout.EndHorizontal();
                 
                 GUILayout.Space(10);
                 if (GUILayout.Button("⚡ APPLY ALTERS", GUILayout.Height(30)))
                 {
                     ApplyEditing(selected);
                 }
+                
+                GUILayout.Space(5);
+                GUI.backgroundColor = new Color(1f, 0.5f, 0f);
+                if (GUILayout.Button("☄️ Phóng Mưa Thiên Thạch (Dội Bom)", GUILayout.Height(30)))
+                {
+                    SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+                    if (builder != null) builder.SpawnTargetedMeteorSwarm(selected);
+                }
+                
+                GUILayout.Space(5);
+                GUI.backgroundColor = new Color(0.9f, 0.2f, 0.2f);
+                if (GUILayout.Button("❌ Xóa Hành Tinh", GUILayout.Height(30)))
+                {
+                    GravitySimulation sim = FindObjectOfType<GravitySimulation>();
+                    if (sim != null) sim.RemoveBody(selected);
+                    simCamera.target = null; // Bỏ focus để đóng bảng UI
+                }
+                GUI.backgroundColor = Color.white;
                 
                 GUILayout.EndArea();
             }
@@ -209,6 +248,7 @@ public class SimulationUI : MonoBehaviour
             if (double.TryParse(editMassStr, out double newMass))
             {
                 body.mass = newMass;
+                if (settings != null) body.CheckBlackHole(settings);
             }
 
             // 2. Cập nhật Vector Vận tốc mới
@@ -232,7 +272,26 @@ public class SimulationUI : MonoBehaviour
                 body.velocity = direction * newSpeedAU;
             }
 
-            // 3. Xoá trail cũ (vì quỹ đạo vừa bị thay đổi đột ngột)
+            // 3. Cập nhật Khoảng cách vật lí tới Vị Trí Mới & LƯU LÀM MỐC SPAWN
+            if (double.TryParse(editDistanceStr, out double newDistanceAU))
+            {
+                DoubleVector3 sunPos = default;
+                if (simulation != null && simulation.sunBody != null)
+                    sunPos = simulation.sunBody.position;
+                    
+                DoubleVector3 dir = new DoubleVector3(1, 0, 0);
+                DoubleVector3 diff = body.position - sunPos;
+                if (diff.sqrMagnitude > 1e-15)
+                {
+                    dir = diff / diff.magnitude;
+                }
+                body.position = sunPos + dir * newDistanceAU;
+                
+                // Lưu khoảng cách này thành khoảng cách Spawn mặc định nếu reset
+                PlanetData.UpdateSpawnDistance(body.bodyName, newDistanceAU);
+            }
+
+            // 4. Xoá trail cũ (vì quỹ đạo vừa bị thay đổi đột ngột)
             body.ClearTrail();
             
             Debug.Log($"[SimulationUI] Applied alters to {body.bodyName}");
@@ -245,17 +304,10 @@ public class SimulationUI : MonoBehaviour
 
     void ResetAllPlanetsToDefault()
     {
-        CelestialBody[] allBodies = FindObjectsOfType<CelestialBody>();
-        foreach (var body in allBodies)
+        SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+        if (builder != null)
         {
-            foreach (var info in PlanetData.AllBodies)
-            {
-                if (body.bodyName == info.name)
-                {
-                    body.mass = info.mass;
-                    break;
-                }
-            }
+            builder.RebuildSystem();
         }
         
         // Trả lại các Mode phá hoại không gian về mặc định
@@ -268,7 +320,7 @@ public class SimulationUI : MonoBehaviour
         // Gọi hàm Render lại toàn bộ Physics từ Script cha
         if (simulation != null)
         {
-            simulation.ResetSimulation();
+            simulation.InitializeSimulation();
         }
         
         // Reset Text field cache để Panel Info tự vẽ lại

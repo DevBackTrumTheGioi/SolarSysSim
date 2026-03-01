@@ -52,7 +52,8 @@ public static class PlanetData
     {
         public string name;
         public double mass;            // Solar masses
-        public double distanceFromSun; // AU (semi-major axis)
+        public double distanceFromSun; // AU (current/initial spawn distance)
+        public double defaultSpawnDistance; // AU (to reset to true original without losing data)
         public double orbitalVelocity; // AU/day (circular orbit approximation)
         public double radius;          // AU (actual physical radius)
         public Color color;            // Visual color
@@ -70,6 +71,7 @@ public static class PlanetData
             this.name = name;
             this.mass = mass;
             this.distanceFromSun = dist;
+            this.defaultSpawnDistance = dist;
             this.orbitalVelocity = vel;
             this.radius = radius;
             this.color = color;
@@ -235,11 +237,23 @@ public static class PlanetData
     );
 
     /// <summary>
-    /// Array tất cả hành tinh để dễ iterate.
+    /// Array tất cả hành tinh để dễ iterate. Không để readonly nội dung array.
     /// </summary>
-    public static readonly BodyInfo[] AllBodies = new BodyInfo[]
+    public static BodyInfo[] AllBodies = new BodyInfo[]
     {
         Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune
     };
+
+    public static void UpdateSpawnDistance(string bodyName, double distance)
+    {
+        for (int i = 0; i < AllBodies.Length; i++)
+        {
+            if (AllBodies[i].name == bodyName)
+            {
+                AllBodies[i].distanceFromSun = distance;
+                break;
+            }
+        }
+    }
 }
 
