@@ -70,29 +70,32 @@ Editor In-Game được thiết kế tách rời hoàn toàn Parameter Editor vs
 
 ---
 
-## 6. Tính Khả Thi Mô Phỏng Va Chạm Hành Tinh (Planetary Collisions)
-*Phân tích R&D (Research & Development) dựa trên Base Code N-Body hiện tại.*
+## 6. Triển Khai Mô Phỏng Va Chạm Hành Tinh (Planetary Collisions)
+*Cơ chế tàn khốc của Vũ trụ đã được tích hợp thành công vào Base Code N-Body.*
 
 ### Góc nhìn Vật lý thực tế
 - **Không có chuyện nảy bật (Elastic Collision):** Các thiên thể khổng lồ không giống như quả bida. Khi va chạm, lực lượng hấp dẫn và động năng quá lớn sẽ phá vỡ cấu trúc và làm bề mặt nung chảy (đá hóa lỏng).
-- **Va chạm không đàn hồi (Inelastic Collision) hoặc Sáp nhập (Merger):** Thiên thể lớn hơn sẽ hấp thụ thiên thể nhỏ hơn (Ví dụ: Thuyết Vụ va chạm lớn tạo ra Mặt Trăng Theia). Khối lượng được cộng gộp, và động lượng được bảo toàn để sinh ra vận tốc và điểm trọng tâm mới.
-- **Vỡ vụn (Fragmentation):** Sinh ra hệ thống tiểu hành tinh N-body khổng lồ (Asteroid belt) - quá phức tạp để mô phỏng Real-time.
+- **Va chạm không đàn hồi (Inelastic Collision) hoặc Sáp nhập (Merger):** Thiên thể lớn hơn (Survivor) sẽ nuốt chửng thiên thể nhỏ hơn (Victim). 
 
-### Tính Khả thi trên Codebase Hấp dẫn (GravitySimulation)
-Đánh giá: **Rất Khả thi (Toán học)** nhưng **Cần tinh chỉnh (Đồ hoạ)**.
+### Giải pháp Toán học & Lập trình đã triển khai (Trong `GravitySimulation.cs`)
 
-**1. Lợi thế hiện tại:**
-- `DoubleVector3` và cơ chế N-Body hoàn hảo để tính toán Định luật bảo toàn Động lượng.
-- Các Body lưu trữ sẵn `mass`, `currentVelocity`, và `position` độc lập.
-- `PlanetData.cs` cung cấp thông số `radius` vật lý thực tế của mỗi hành tinh (Đơn vị AU).
+**1. Bảo toàn Động lượng (Momentum) và Khối lượng (Mass):**
+Khi hai hành tinh lồng vào nhau, Lõi của thuật toán tính toán lại thông số cho kẻ Sống sót:
+- Tổng khối lượng mới: $M_{new} = M_1 + M_2$
+- Vận tốc mới duy trì Động lượng hệ kín: $\vec{v}_{new} = \frac{M_1 \vec{v}_1 + M_2 \vec{v}_2}{M_1 + M_2}$
+- Bán kính mới (Radius): Thể tích hình cầu tỷ lệ thuận với Mass, nên Bán kính mới bằng Bán kính cũ nhân với $\sqrt[3]{\frac{M_{new}}{M_{old}}}$. Kích thước đồ họa (`baseVisualScale`) cũng phình to tương ứng.
 
-**2. Công thức Sáp nhập (Merger Logic):**
-Ngay trong vòng lặp cập nhật vận tốc `Update()`, nội suy khoảng cách: `if (dist < radiusA + radiusB)`
-- Bảo toàn động lượng (Momentum): `v_mới = (m1*v1 + m2*v2) / (m1+m2)`
-- Update Thể tích (dựa trên Scale tỷ lệ thuận với Căn bậc ba của Mass).
-- `Destroy(Victim)` (Huỷ game object nhỏ hơn) và `Remove` khỏi array duyệt vòng lặp.
+**2. Khắc phục Lỗi Xuyên hầm (Continuous Collision Detection - CCD):**
+Ở chế độ `timeScale` cực nhanh (Time Warp), bước nhảy tích phân `dt` rất lớn. Một hành tinh bay ở tốc độ cao (VD: 1 AU/day) có thể nhảy chéo "xuyên qua" ruột Trái Đất chỉ trong 1 Frame mã nguồn, khiến lệnh `if(khoảng_cách < tổng_bán_kính)` không kịp bắt được khoảnh khắc va chạm.
+- **Cách giải quyết:** Áp dụng phương trình hình học Không gian. Tính Toán Vector Vận tốc tương đối (`relVel`) và Vị trí tương đối (`relPos`). Giải phương trình bậc 2 ($at^2 + bt + c = 0$) để tìm điểm giao cắt trên đường thẳng quỹ đạo di chuyển DỰ ĐOÁN của 2 thực thể TRONG NỘI QUÁ TRÌNH TIMESTEP `dt`. Chỉ cần nghiệm $t$ rơi vào khoảng `[0, dt]`, Hệ thống tính là Va chạm thành công dù cuối khung hình khoảng cách hai thực thể đã văng xa nhau! 
 
-**3. Thách thức Kỹ thuật (Cần khắc phục nếu Triển khai):**
-- **Lỗi Xuyên hầm (Tunneling Effect):** Ở chế độ `timeScale` cực nhanh (Time Warp), bước nhảy `dt` quá lớn. Các hành tinh bay quãng đường rất xa lố qua quỹ đạo trong 1 Frame. Nó có thể bay "xuyên qua" nhau trước khi vòng lặp kịp kích hoạt cờ kiểm tra khoảng cách. Bắt buộc phải triển khai thuật toán Phát hiện Va chạm Liên tục bằng Toán học (Toán học cắt đường thẳng Line-sphere intersection cho Quãng đường di chuyển trong `dt`) thay vì đo khoảng cách khung hình cuối.
-- **Xung đột Đồ hoạ (Friendly Mode):** Do vỏ Sphere Unity bị phóng to hàng ngàn lần so với `radius` thật. Người chơi sẽ thấy 2 hành tinh đâm xuyên lút cán vào nhau trên màn ảnh mà Game vẫn không cho nổ (do chưa chạm lõi). **Giải pháp:** Chỉ kích hoạt Mode Va Chạm Vỡ Nát ở chế độ **Realistic Mode**, vô hiệu hoá ở Friendly Mode.
-- **VFX Particle:** Cần lập trình sinh ra cấu trúc lớp phủ Vụ Nổ siêu lớn (hệ Thuyết vụ nổ) để làm mờ đi khoảnh khắc `Destroy(Victim)` và tăng kích thước đột ngột của `Survivor`.
+**3. Tối ưu Hiệu Năng Vòng lặp N-Body:**
+Không mạo hiểm dùng danh sách Động (List) bên trong vòng lặp Vật lý `Update()` cấp thấp để tránh rác (Garbage Collector Spike). Khi có va chạm, `Victim` chỉ bị vô hiệu hóa biến Mass = 0, ẩn Game Object. Hệ thống sẽ cấp phát (Rebuild) mảng Array `bodies` mới và chép dữ liệu các hành tinh còn sống sang chỉ 1 LẦN DUY NHẤT ngay sau khi vụ nổ xảy ra.
+
+**4. Kịch bản Đồ hoạ (VFX): Sức nóng Tới tột đỉnh**
+Ngay khoảnh khắc nuốt chửng Victim, `Survivor.TriggerCollisionVFX(victimMass)` sẽ được gọi. 
+1. Sử dụng Coroutine nhúng trong `CelestialBody.cs`.
+2. Mở khóa từ khóa Shader vật liệu `_EMISSION`.
+3. Bơm ánh sáng cực gắt màu Đỏ Cam với cường độ (Intensity) tính toán dựa vào trọng lượng nạn nhân (Nạn nhân càng lớn, lõi năng lượng tỏa ra càng sáng).
+4. Phơi sáng bùng nổ trong 0.2s đầu tiên, sau đó nguội dần (Cooldown) làm mờ phát quang trở về màu vật lý đá gốc trong 3 đến 5 giây tiếp theo.
+5. `Victim` bị nuốt chửng biến mất vĩnh viễn khỏi cảnh. Khán giả được cảm nhận sức giật nảy Quỹ đạo cực mượt nhờ hiệu ứng Line Renderer của Trail tự động bẻ góc gắt đi theo Vận tốc mới (`newVelocity`) của Kẻ Sống Sót.
