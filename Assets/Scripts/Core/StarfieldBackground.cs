@@ -47,9 +47,27 @@ public class StarfieldBackground : MonoBehaviour
         emission.enabled = false;
         shape.enabled = false;
 
-        // Dùng Material mặc định, vòng tròn, không đổ bóng, tự sáng
+        // Dùng Material build-safe: tìm SolarSystemBuilder để lấy particleMaterial đã gán sẵn
         ParticleSystemRenderer pRenderer = particleSys.GetComponent<ParticleSystemRenderer>();
-        pRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+        if (builder != null && builder.particleMaterial != null)
+        {
+            pRenderer.material = builder.particleMaterial;
+        }
+        else
+        {
+            // Fallback: thử Shader.Find (chỉ hoạt động trong Editor)
+            Shader fallbackShader = Shader.Find("Particles/Standard Unlit");
+            if (fallbackShader == null) fallbackShader = Shader.Find("Sprites/Default");
+            if (fallbackShader != null)
+            {
+                pRenderer.material = new Material(fallbackShader);
+            }
+            else
+            {
+                Debug.LogWarning("[StarfieldBackground] No particle shader found. Assign particleMaterial on SolarSystemBuilder.");
+            }
+        }
 
         stars = new ParticleSystem.Particle[maxStars];
         CreateStars();

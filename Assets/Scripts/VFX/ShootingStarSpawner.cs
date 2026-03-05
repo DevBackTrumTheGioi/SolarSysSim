@@ -81,22 +81,29 @@ public class ShootingStarSpawner : MonoBehaviour
         // Scale siêu nhỏ (gần vô hình, chỉ trail là quan trọng)
         star.transform.localScale = Vector3.one * 0.02f;
 
-        // Material phát sáng
-        Material starMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        // Màu sắc ngẫu nhiên: trắng, vàng nhạt, hoặc xanh nhạt
-        float colorRand = Random.value;
-        Color starColor;
-        if (colorRand < 0.5f)
-            starColor = new Color(1f, 1f, 0.9f); // Trắng ấm
-        else if (colorRand < 0.8f)
-            starColor = new Color(1f, 0.85f, 0.5f); // Vàng cam
-        else
-            starColor = new Color(0.6f, 0.8f, 1f); // Xanh lạnh
-        
-        starMat.color = starColor;
-        starMat.EnableKeyword("_EMISSION");
-        starMat.SetColor("_EmissionColor", starColor * 3f);
-        mr.material = starMat;
+        // Material phát sáng (build-safe: thử nhiều shader)
+        Shader litShader = Shader.Find("Universal Render Pipeline/Lit");
+        if (litShader == null) litShader = Shader.Find("Standard");
+        if (litShader == null) litShader = Shader.Find("Sprites/Default");
+        if (litShader != null)
+        {
+            Material starMat = new Material(litShader);
+            float colorRand = Random.value;
+            Color starColor;
+            if (colorRand < 0.5f)
+                starColor = new Color(1f, 1f, 0.9f);
+            else if (colorRand < 0.8f)
+                starColor = new Color(1f, 0.85f, 0.5f);
+            else
+                starColor = new Color(0.6f, 0.8f, 1f);
+            
+            starMat.color = starColor;
+            if (litShader.name.Contains("Lit") || litShader.name == "Standard")
+            {
+                starMat.EnableKeyword("_EMISSION");
+                starMat.SetColor("_EmissionColor", starColor * 3f);
+            }
+            mr.material = starMat;
 
         // === 3. TRAIL RENDERER ===
         TrailRenderer trail = star.AddComponent<TrailRenderer>();
@@ -105,8 +112,15 @@ public class ShootingStarSpawner : MonoBehaviour
         trail.startWidth = Random.Range(0.03f, 0.08f);
         trail.endWidth = 0f;
 
-        // Material trail phát sáng
-        trail.material = new Material(Shader.Find("Sprites/Default"));
+        // Material trail (build-safe)
+        SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+        if (builder != null && builder.particleMaterial != null)
+            trail.material = builder.particleMaterial;
+        else
+        {
+            Shader trailShader = Shader.Find("Sprites/Default");
+            if (trailShader != null) trail.material = new Material(trailShader);
+        }
         
         // Gradient: sáng rực ở đầu → mờ dần → trong suốt ở đuôi
         Gradient gradient = new Gradient();
@@ -146,6 +160,12 @@ public class ShootingStarSpawner : MonoBehaviour
 
         // Tự hủy sau lifetime + trail time (chờ trail tan hết)
         Destroy(star, lifetime + trail.time + 0.5f);
+        }
+        else
+        {
+            // Không tìm thấy shader nào — skip spawn
+            Destroy(star);
+        }
     }
 }
 

@@ -118,6 +118,33 @@ public class GravitySimulation : MonoBehaviour
 
         isInitialized = true;
         Debug.Log($"[GravitySimulation] Initialized with {bodyCount} bodies. G = {settings.gravitationalConstant}");
+
+        // === BUILD FIX: Cập nhật Visual Position ngay lập tức sau Init ===
+        // Không cần chờ Update() chạy (vì timeScale có thể = 0).
+        UpdateVisualPositionsOnce();
+    }
+
+    /// <summary>
+    /// Cập nhật visual position 1 lần duy nhất (không cần timeScale > 0).
+    /// Giải quyết bug: hành tinh không hiển thị cho tới khi nhấn Reset.
+    /// </summary>
+    private void UpdateVisualPositionsOnce()
+    {
+        if (!isInitialized || bodies == null || sunBody == null) return;
+
+        DoubleVector3 sunPhysicsPos = sunBody.position;
+        if (settings.mode == SimulationSettings.SimMode.GameFriendly)
+            sunBody.transform.position = new Vector3(0f, (float)sunPhysicsPos.y, 0f);
+        else
+            sunBody.transform.position = sunPhysicsPos.ToVector3();
+
+        Vector3 sunVisualPos = sunBody.transform.position;
+
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i] == sunBody) continue;
+            bodies[i].UpdateVisualPosition(settings, sunPhysicsPos, sunVisualPos);
+        }
     }
 
     // === FIX 1 & 2: Giới hạn dt tối đa mỗi sub-step để tránh energy drift và orbit thẳng ===

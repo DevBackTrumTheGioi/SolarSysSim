@@ -214,7 +214,16 @@ public class CelestialBody : MonoBehaviour
 
         orbitLine.enabled = settings.showOrbits;
 
-        orbitLine.material = new Material(Shader.Find("Sprites/Default"));
+        // Build-safe Material: ưu tiên particleMaterial từ Builder, fallback Shader.Find
+        SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
+        if (builder != null && builder.particleMaterial != null)
+            orbitLine.material = builder.particleMaterial;
+        else
+        {
+            Shader lineShader = Shader.Find("Sprites/Default");
+            if (lineShader == null) lineShader = Shader.Find("Particles/Standard Unlit");
+            if (lineShader != null) orbitLine.material = new Material(lineShader);
+        }
         
         // --- 1. Gradient Màu sắc tuyệt đẹp ---
         // Đuôi (index 0) hoàn toàn trong suốt. Đầu (index 1) màu rực rỡ sáng chói.

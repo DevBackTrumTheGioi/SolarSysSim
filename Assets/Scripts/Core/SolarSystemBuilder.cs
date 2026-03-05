@@ -12,6 +12,16 @@ public class SolarSystemBuilder : MonoBehaviour
     [Header("=== SETTINGS ===")]
     public SimulationSettings settings;
 
+    [Header("=== MATERIALS (Kéo vào để tránh bị stripped khi Build) ===")]
+    [Tooltip("Kéo Material Skybox/Panoramic vào đây (tạo sẵn trong Assets). Nếu trống sẽ fallback đen.")]
+    public Material skyboxMaterial;
+
+    [Tooltip("Material dùng cho Particle/Trail (Stars, Orbits). Kéo Material dùng Sprites/Default shader vào.")]
+    public Material particleMaterial;
+
+    [Tooltip("Material dùng cho các vật thể spawn runtime (Rogue, Meteor). Kéo Material dùng URP/Lit vào.")]
+    public Material fallbackLitMaterial;
+
     [Header("=== PREFABS (kéo prefab từ Planets of the Solar System 3D/Prefabs vào đây) ===")]
     [Tooltip("Kéo prefab hành tinh vào đây. Script sẽ match theo tên (Sun, Mercury, Venus, ...)")]
     public GameObject[] planetPrefabs;
@@ -23,6 +33,37 @@ public class SolarSystemBuilder : MonoBehaviour
     // Directional Light sẽ follow Sun mỗi frame
     private Light sunLight;
     private Transform sunTransform;
+
+    /// <summary>
+    /// Tạo Material Lit an toàn cho Build. Ưu tiên fallbackLitMaterial đã gán trong Inspector.
+    /// </summary>
+    public Material GetSafeLitMaterial(Color color, bool emission = false, float emissionIntensity = 2f)
+    {
+        Material mat;
+        if (fallbackLitMaterial != null)
+        {
+            mat = new Material(fallbackLitMaterial);
+        }
+        else
+        {
+            Shader litShader = Shader.Find("Universal Render Pipeline/Lit");
+            if (litShader == null) litShader = Shader.Find("Standard");
+            if (litShader == null)
+            {
+                Debug.LogWarning("[SolarSystemBuilder] No Lit shader found! Assign fallbackLitMaterial in Inspector.");
+                return null;
+            }
+            mat = new Material(litShader);
+        }
+
+        mat.color = color;
+        if (emission)
+        {
+            mat.EnableKeyword("_EMISSION");
+            mat.SetColor("_EmissionColor", color * emissionIntensity);
+        }
+        return mat;
+    }
 
     void Awake()
     {
@@ -47,40 +88,46 @@ public class SolarSystemBuilder : MonoBehaviour
     {
         Camera cam = Camera.main;
 
-        // === THỬ LOAD SKYBOX TỪ RESOURCES ===
-        // Tìm texture panoramic trong Resources/cosmic_background
-        Texture2D skyTexture = Resources.Load<Texture2D>("cosmic_background");
-
-        if (skyTexture != null)
+        // === SKYBOX: Ưu tiên Material đã kéo vào Inspector (build-safe) ===
+        if (skyboxMaterial != null)
         {
-            // Dùng Skybox/Panoramic shader (equirectangular 360°)
-            Material skyMat = new Material(Shader.Find("Skybox/Panoramic"));
-            skyMat.SetTexture("_MainTex", skyTexture);
-            skyMat.SetFloat("_Exposure", 0.4f); // Tối bớt để không lấn át hành tinh
-            RenderSettings.skybox = skyMat;
-
-            if (cam != null)
-            {
-                cam.clearFlags = CameraClearFlags.Skybox;
-            }
-
-            Debug.Log("[SolarSystemBuilder] Loaded cosmic skybox from Resources/cosmic_background");
+            RenderSettings.skybox = skyboxMaterial;
+            if (cam != null) cam.clearFlags = CameraClearFlags.Skybox;
+            Debug.Log("[SolarSystemBuilder] Using pre-assigned skybox material.");
         }
         else
         {
-            // Fallback: background đen nếu chưa có texture
-            if (cam != null)
+            // Fallback: thử load texture từ Resources và tạo material runtime
+            Texture2D skyTexture = Resources.Load<Texture2D>("cosmic_background");
+            if (skyTexture != null)
             {
-                cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = Color.black;
+                Shader panoShader = Shader.Find("Skybox/Panoramic");
+                if (panoShader != null)
+                {
+                    Material skyMat = new Material(panoShader);
+                    skyMat.SetTexture("_MainTex", skyTexture);
+                    skyMat.SetFloat("_Exposure", 0.4f);
+                    RenderSettings.skybox = skyMat;
+                    if (cam != null) cam.clearFlags = CameraClearFlags.Skybox;
+                    Debug.Log("[SolarSystemBuilder] Created skybox material from Resources.");
+                }
+                else
+                {
+                    Debug.LogWarning("[SolarSystemBuilder] Skybox/Panoramic shader not found (stripped in build). Assign skyboxMaterial in Inspector.");
+                    if (cam != null) { cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = Color.black; }
+                }
             }
-            RenderSettings.skybox = null;
-            Debug.LogWarning("[SolarSystemBuilder] cosmic_background not found in Resources. Using black background.");
+            else
+            {
+                if (cam != null) { cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = Color.black; }
+                RenderSettings.skybox = null;
+                Debug.LogWarning("[SolarSystemBuilder] No skybox texture or material found. Using black background.");
+            }
         }
 
-        // Ambient light rất tối — không gian vũ trụ
+        // Ambient light — đủ sáng để thấy mặt tối hành tinh, nhưng vẫn giữ cảm giác vũ trụ
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.05f, 0.05f, 0.08f);
+        RenderSettings.ambientLight = new Color(0.12f, 0.12f, 0.15f);
     }
 
     /// <summary>
@@ -122,8 +169,8 @@ public class SolarSystemBuilder : MonoBehaviour
         Light pointLight = lightObj.AddComponent<Light>();
         pointLight.type = LightType.Point;
         pointLight.color = new Color(1f, 0.95f, 0.8f); // Ánh sáng ấm của Mặt Trời
-        pointLight.intensity = 2f;
-        pointLight.range = 100f; // Đủ xa để chiếu tới Neptune
+        pointLight.intensity = 3f;   // Tăng cường độ để hành tinh có phần sáng/tối rõ ràng
+        pointLight.range = 500f;     // Bao phủ toàn bộ hệ mặt trời kể cả Neptune
         pointLight.shadows = LightShadows.None; // Tắt shadow cho performance
 
         if (sunTransform != null)
@@ -177,16 +224,9 @@ public class SolarSystemBuilder : MonoBehaviour
             Renderer bodyRenderer = obj.GetComponent<Renderer>();
             if (bodyRenderer != null)
             {
-                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                mat.color = data.color;
-
-                if (data.name == "Sun")
-                {
-                    mat.EnableKeyword("_EMISSION");
-                    mat.SetColor("_EmissionColor", data.color * 2f);
-                }
-
-                bodyRenderer.material = mat;
+                bool isSun = (data.name == "Sun");
+                Material mat = GetSafeLitMaterial(data.color, isSun, 2f);
+                if (mat != null) bodyRenderer.material = mat;
             }
 
             Debug.LogWarning($"[SolarSystemBuilder] Prefab not found for {data.name}, using sphere fallback.");
@@ -320,11 +360,8 @@ public class SolarSystemBuilder : MonoBehaviour
         Renderer bodyRenderer = obj.GetComponent<Renderer>();
         if (bodyRenderer != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = new Color(1f, 0.2f, 0.2f); // Màu Đỏ máu mộng tinh
-            mat.EnableKeyword("_EMISSION");
-            mat.SetColor("_EmissionColor", mat.color * 2f);
-            bodyRenderer.material = mat;
+            Material mat = GetSafeLitMaterial(new Color(1f, 0.2f, 0.2f), true, 2f);
+            if (mat != null) bodyRenderer.material = mat;
         }
 
         Collider col = obj.GetComponent<Collider>();
@@ -376,9 +413,8 @@ public class SolarSystemBuilder : MonoBehaviour
             Renderer bodyRenderer = obj.GetComponent<Renderer>();
             if (bodyRenderer != null)
             {
-                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                mat.color = new Color(0.6f, 0.6f, 0.65f); // Đá xám
-                bodyRenderer.material = mat;
+                Material mat = GetSafeLitMaterial(new Color(0.6f, 0.6f, 0.65f));
+                if (mat != null) bodyRenderer.material = mat;
             }
 
             Collider col = obj.GetComponent<Collider>();
@@ -440,11 +476,8 @@ public class SolarSystemBuilder : MonoBehaviour
             Renderer bodyRenderer = obj.GetComponent<Renderer>();
             if (bodyRenderer != null)
             {
-                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                mat.color = new Color(0.8f, 0.4f, 0.1f); // Đá rực lửa đỏ
-                mat.EnableKeyword("_EMISSION");
-                mat.SetColor("_EmissionColor", mat.color * 1.5f);
-                bodyRenderer.material = mat;
+                Material mat = GetSafeLitMaterial(new Color(0.8f, 0.4f, 0.1f), true, 1.5f);
+                if (mat != null) bodyRenderer.material = mat;
             }
 
             Collider col = obj.GetComponent<Collider>();
