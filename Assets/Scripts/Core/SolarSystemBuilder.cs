@@ -200,9 +200,10 @@ public class SolarSystemBuilder : MonoBehaviour
         }
         obj.transform.localScale = Vector3.one * scale;
 
-        // Xóa Collider (không cần physics collision trong simulation)
+        // Giữ lại Collider để Camera có thể Raycast (Click) chọn hành tinh
+        // Kích hoạt isTrigger để Collider không tương tác vật lý tĩnh lộn xộn
         Collider col = obj.GetComponent<Collider>();
-        if (col != null) Destroy(col);
+        if (col != null) col.isTrigger = true;
 
         // Gắn CelestialBody component
         CelestialBody body = obj.AddComponent<CelestialBody>();

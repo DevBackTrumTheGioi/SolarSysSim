@@ -60,8 +60,6 @@ public class SimulationSettings : ScriptableObject
     public float gravityMultiplier = 1.0f;
 
     [Header("=== PHYSICS & COLLISION ===")]
-    [Tooltip("Bật tắt tính năng Sáp nhập Hành tinh khi va chạm. (Cẩn thận trong Friendly Mode)")]
-    public bool enableCollisions = false;
 
     [Header("=== COSMIC EVENTS ===")]
     [Tooltip("Khối lượng (Solar Mass) tối thiểu để một thiên thể suy sụp thành Lỗ Đen")]

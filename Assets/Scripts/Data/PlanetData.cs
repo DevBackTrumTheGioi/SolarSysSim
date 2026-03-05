@@ -102,7 +102,7 @@ public static class PlanetData
         vel: 0.0,
         radius: 0.00465,
         color: new Color(1f, 0.9f, 0.3f),
-        visualScale: 0.8f,
+        visualScale: 0.4f,
         axialTilt: 7.25f,
         rotationPeriod: 25.05f, // ~25 days at equator
         prefabPath: "Planets of the Solar System 3D/Prefabs/Sun"

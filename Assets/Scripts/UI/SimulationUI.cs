@@ -12,7 +12,7 @@ public class SimulationUI : MonoBehaviour
 
     public bool isMainMenu = true;
 
-    private bool showHelp = true;
+    private bool showUI = true;
     private Texture2D bgTexture;
     
     // Lưu tạm string nhập vào UI Editor
@@ -48,9 +48,18 @@ public class SimulationUI : MonoBehaviour
             return;
         }
 
+        // Toggle toàn bộ UI in-game bằng phím H
+        if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.H)
+        {
+            showUI = !showUI;
+            Event.current.Use(); // Tiêu thụ event ngay để tránh nhảy đúp do OnGUI gọi nhiều lần/frame
+        }
+
+        if (!showUI) return;
+
         // === SIMULATION INFO (top-left) ===
-        GUILayout.BeginArea(new Rect(10, 10, 320, 520));
-        GUI.Box(new Rect(0, 0, 320, 520), "", boxStyle); // Vẽ background xám phía sau nội dung
+        GUILayout.BeginArea(new Rect(10, 10, 320, 720));
+        GUI.Box(new Rect(0, 0, 320, 720), "", boxStyle); // Vẽ background xám phía sau nội dung
         
         GUI.backgroundColor = new Color(0.2f, 0.6f, 1f);
         if (GUILayout.Button("⬅ Back to Menu", GUILayout.Height(30)))
@@ -104,13 +113,12 @@ public class SimulationUI : MonoBehaviour
             settings.showOrbits = GUILayout.Toggle(settings.showOrbits, " Show Orbits (Trails)");
 
             GUILayout.Space(5);
-            settings.enableCollisions = GUILayout.Toggle(settings.enableCollisions, " Enable Physics Collisions");
 
             GUILayout.Space(5);
             ShootingStarSpawner starSpawner = FindObjectOfType<ShootingStarSpawner>();
             if (starSpawner != null)
             {
-                starSpawner.enableShootingStars = GUILayout.Toggle(starSpawner.enableShootingStars, " ✨ Shooting Stars (Sao Băng)");
+                starSpawner.enableShootingStars = GUILayout.Toggle(starSpawner.enableShootingStars, " ✨ Shooting Stars");
             }
 
             GUILayout.Space(5);
@@ -123,7 +131,7 @@ public class SimulationUI : MonoBehaviour
 
 
             GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-            if (GUILayout.Button("☄️ Mời Gọi Kẻ Hủy Diệt (Rogue Planet)", GUILayout.Height(30)))
+            if (GUILayout.Button("☄️ Spawn Rogue Planet", GUILayout.Height(30)))
             {
                 SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
                 if (builder != null) builder.SpawnRoguePlanet();
@@ -131,7 +139,7 @@ public class SimulationUI : MonoBehaviour
 
             GUILayout.Space(5);
             GUI.backgroundColor = new Color(0.7f, 0.7f, 0.7f);
-            if (GUILayout.Button("🌧 Triệu Hỏi Mưa Thiên Thạch", GUILayout.Height(30)))
+            if (GUILayout.Button("🌧 Spawn Meteor Swarm", GUILayout.Height(30)))
             {
                 SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
                 if (builder != null) builder.SpawnMeteorSwarm();
@@ -143,60 +151,32 @@ public class SimulationUI : MonoBehaviour
             {
                 ResetAllPlanetsToDefault();
             }
+            
+            // === CONTROLS INSTRUCTIONS ===
+            GUILayout.Space(20);
+            GUILayout.Label("Controls:", boldLabel);
+            GUIStyle controlStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
+            GUILayout.Label("• Scroll: Zoom In/Out\n• Right Click + Drag: Rotate Camera\n• Left Click / Number 1-9: Select Planet\n• Space: Reset Camera View\n• R: Reset Simulation (Reset positions to default)\n• H: Toggle UI Visibility", controlStyle);
         }
         GUILayout.EndArea();
 
         // === CONTROLS / HELP (bottom-center) ===
-        if (showHelp)
-        {
-            // Tính toán vị trí ra giữa đáy màn hình
-            float helpWidth = 700f;
-            float helpHeight = 60f;
-            float helpX = (Screen.width - helpWidth) / 2f;
-            float helpY = Screen.height - helpHeight - 10f;
-            
-            GUILayout.BeginArea(new Rect(helpX, helpY, helpWidth, helpHeight));
-            GUI.Box(new Rect(0, 0, helpWidth, helpHeight), "", boxStyle);
-            GUILayout.BeginHorizontal();
-            
-            GUIStyle controlStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
-            GUILayout.Label("Scroll: Zoom", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("Right-click + Drag: Rotate", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("Left-click: Select planet", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("1-9: Quick select", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("Space: Reset cam", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("R: Reset Sim", controlStyle);
-            GUILayout.Label("|", controlStyle);
-            GUILayout.Label("H: Toggle Help", controlStyle);
-            
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
-
-        if (Input.GetKeyDown(KeyCode.H))
-            showHelp = !showHelp;
-
         // Reset simulation - chỉ hoạt động khi không ở Menu
         if (Input.GetKeyDown(KeyCode.R) && !isMainMenu)
         {
             ResetAllPlanetsToDefault();
         }
 
-        // === SELECTED BODY INFO (right-center) ===
+        // === SELECTED BODY INFO (top-right) ===
         if (simCamera != null && simCamera.target != null && simCamera.target.gameObject != null && simCamera.target.gameObject.activeInHierarchy)
         {
             CelestialBody selected = simCamera.target.GetComponent<CelestialBody>();
             if (selected != null)
             {
                 float infoWidth = 320f;
-                float infoHeight = 265f;
+                float infoHeight = 490f; // Cao hơn để chứa hiển thị parameters & description
                 float infoX = Screen.width - infoWidth - 20f;
-                float infoY = (Screen.height - infoHeight) / 2f;
+                float infoY = 10f; // Đưa lên góc trên cùng bên phải theo ý user
 
                 GUILayout.BeginArea(new Rect(infoX, infoY, infoWidth, infoHeight));
                 GUI.Box(new Rect(0, 0, infoWidth, infoHeight), "", boxStyle);
@@ -252,7 +232,7 @@ public class SimulationUI : MonoBehaviour
                 
                 GUILayout.Space(5);
                 GUI.backgroundColor = new Color(1f, 0.5f, 0f);
-                if (GUILayout.Button("☄️ Phóng Mưa Thiên Thạch (Dội Bom)", GUILayout.Height(30)))
+                if (GUILayout.Button("☄️ Targeted Meteor Strike", GUILayout.Height(30)))
                 {
                     SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
                     if (builder != null) builder.SpawnTargetedMeteorSwarm(selected);
@@ -260,13 +240,33 @@ public class SimulationUI : MonoBehaviour
                 
                 GUILayout.Space(5);
                 GUI.backgroundColor = new Color(0.9f, 0.2f, 0.2f);
-                if (GUILayout.Button("❌ Xóa Hành Tinh", GUILayout.Height(30)))
+                if (GUILayout.Button("❌ Delete Planet", GUILayout.Height(30)))
                 {
                     GravitySimulation sim = FindObjectOfType<GravitySimulation>();
                     if (sim != null) sim.RemoveBody(selected);
                     simCamera.target = null; // Bỏ focus để đóng bảng UI
                 }
                 GUI.backgroundColor = Color.white;
+                
+                // === REALTIME INFO ===
+                GUILayout.Space(15);
+                GUIStyle localBold = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
+                GUILayout.Label("--- REALTIME INFO ---", localBold);
+                
+                double realSpeedKmS = selected.velocity.magnitude * 1731.5;
+                DoubleVector3 sunPosition = default;
+                if (simulation != null && simulation.sunBody != null) sunPosition = simulation.sunBody.position;
+                double realDistanceAU = (selected.position - sunPosition).magnitude;
+                
+                GUILayout.Label($"Speed: {realSpeedKmS:F2} km/s");
+                GUILayout.Label($"Distance to Sun: {realDistanceAU:F4} AU");
+                GUILayout.Label($"Mass: {selected.mass:E3} M☉");
+                
+                // === DESCRIPTION ===
+                GUILayout.Space(15);
+                GUILayout.Label("--- DESCRIPTION ---", localBold);
+                GUIStyle descStyle = new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 13 };
+                GUILayout.Label(GetPlanetDescription(selected.bodyName), descStyle);
                 
                 GUILayout.EndArea();
             }
@@ -423,6 +423,23 @@ public class SimulationUI : MonoBehaviour
 
         GUILayout.EndVertical();
         GUILayout.EndArea();
+    }
+
+    private string GetPlanetDescription(string name)
+    {
+        switch (name)
+        {
+            case "Sun": return "A G-type main-sequence star. The center of our solar system.";
+            case "Mercury": return "The smallest and closest planet to the Sun. A cratered, sun-scorched world.";
+            case "Venus": return "The second planet, wrapped in a thick, toxic atmosphere. Hottest planet in the system.";
+            case "Earth": return "Our home planet. The only place we know of so far that's inhabited by living things.";
+            case "Mars": return "The Red Planet. A dusty, cold, desert world with a very thin atmosphere.";
+            case "Jupiter": return "The largest planet. A gas giant with a Great Red Spot and dozens of moons.";
+            case "Saturn": return "A gas giant adorned with a dazzling, complex system of icy rings.";
+            case "Uranus": return "An ice giant that rotates on its side. It has a blue-green color from methane.";
+            case "Neptune": return "The most distant major planet. Dark, cold, and whipped by supersonic winds.";
+            default: return "An unknown celestial body floating in the vastness of space.";
+        }
     }
 }
 

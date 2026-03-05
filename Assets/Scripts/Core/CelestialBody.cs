@@ -93,6 +93,21 @@ public class CelestialBody : MonoBehaviour
         transform.rotation = Quaternion.Euler(axialTilt, 0, 0);
     }
 
+    void Update()
+    {
+        // === FIX: Dynamic Orbit Line Width (Anti-Zoom Bloat) ===
+        // Điều chỉnh widthMultiplier nội suy theo khoảng cách tới Camera.
+        // Giúp khi zoom thật sát vào hành tinh thì dải trail không bị phình to che khuất cả màn hình.
+        if (orbitLine != null && orbitLine.enabled && Camera.main != null)
+        {
+            float distToCam = Vector3.Distance(transform.position, Camera.main.transform.position);
+            // Distance tẩm 10 (mặc định) -> widthMultiplier = 1.0f
+            // Zoom lại gần (dist < 5) -> widthMultiplier nhỏ đi theo tỉ lệ 0.1f. 
+            // Clamp trong khoảng cực nhỏ để tránh biến mất, và max là 5.0f.
+            orbitLine.widthMultiplier = Mathf.Clamp(distToCam * 0.1f, 0.05f, 5.0f);
+        }
+    }
+
     /// <summary>
     /// Xoay hành tinh quang trục Y Local mỗi frame dựa theo rotationPeriod và TimeScale
     /// </summary>
