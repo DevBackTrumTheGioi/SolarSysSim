@@ -10,6 +10,8 @@ public class SimulationUI : MonoBehaviour
     public SimulationSettings settings;
     public SimulationCamera simCamera;
 
+    public bool isMainMenu = true;
+
     private bool showHelp = true;
     private Texture2D bgTexture;
     
@@ -37,9 +39,31 @@ public class SimulationUI : MonoBehaviour
         GUIStyle boxStyle = new GUIStyle(GUI.skin.box);
         boxStyle.normal.background = bgTexture;
         
+        if (isMainMenu)
+        {
+            // Tuân lệnh đại ca: Pause mọi thứ về game khi ở Main Menu
+            if (settings != null) settings.timeScale = 0f;
+            
+            DrawMainMenu(boxStyle, titleStyle);
+            return;
+        }
+
         // === SIMULATION INFO (top-left) ===
-        GUILayout.BeginArea(new Rect(10, 10, 320, 480));
-        GUI.Box(new Rect(0, 0, 320, 480), "", boxStyle); // Vẽ background xám phía sau nội dung
+        GUILayout.BeginArea(new Rect(10, 10, 320, 520));
+        GUI.Box(new Rect(0, 0, 320, 520), "", boxStyle); // Vẽ background xám phía sau nội dung
+        
+        GUI.backgroundColor = new Color(0.2f, 0.6f, 1f);
+        if (GUILayout.Button("⬅ Back to Menu", GUILayout.Height(30)))
+        {
+            isMainMenu = true;
+            if (settings != null) settings.timeScale = 0f; // Tạm dừng game khi ra menu
+            
+            // Đảm bảo đưa mọi thứ về trạng thái tinh khôi
+            ResetAllPlanetsToDefault();
+        }
+        GUI.backgroundColor = Color.white;
+        GUILayout.Space(10);
+
         GUILayout.Label("☀ Solar System Simulation", titleStyle);
         
         if (settings != null)
@@ -81,6 +105,13 @@ public class SimulationUI : MonoBehaviour
 
             GUILayout.Space(5);
             settings.enableCollisions = GUILayout.Toggle(settings.enableCollisions, " Enable Physics Collisions");
+
+            GUILayout.Space(5);
+            ShootingStarSpawner starSpawner = FindObjectOfType<ShootingStarSpawner>();
+            if (starSpawner != null)
+            {
+                starSpawner.enableShootingStars = GUILayout.Toggle(starSpawner.enableShootingStars, " ✨ Shooting Stars (Sao Băng)");
+            }
 
             GUILayout.Space(5);
             settings.enableSunDrift = GUILayout.Toggle(settings.enableSunDrift, " Enable Sun Drift (Galaxy Motion)");
@@ -150,9 +181,11 @@ public class SimulationUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.H))
             showHelp = !showHelp;
 
-        // Reset simulation
-        if (Input.GetKeyDown(KeyCode.R) && simulation != null)
-            simulation.ResetSimulation();
+        // Reset simulation - chỉ hoạt động khi không ở Menu
+        if (Input.GetKeyDown(KeyCode.R) && !isMainMenu)
+        {
+            ResetAllPlanetsToDefault();
+        }
 
         // === SELECTED BODY INFO (right-center) ===
         if (simCamera != null && simCamera.target != null && simCamera.target.gameObject != null && simCamera.target.gameObject.activeInHierarchy)
@@ -304,6 +337,9 @@ public class SimulationUI : MonoBehaviour
 
     void ResetAllPlanetsToDefault()
     {
+        // 1. Phục hồi mảng Data cứng về đúng như ban đầu (Mass, Distance, Velocity chuẩn)
+        PlanetData.ResetToDefaults();
+        
         SolarSystemBuilder builder = FindObjectOfType<SolarSystemBuilder>();
         if (builder != null)
         {
@@ -327,6 +363,66 @@ public class SimulationUI : MonoBehaviour
         currentEditingBody = null;
         
         Debug.Log("[SimulationUI] Restored all planetary masses and reset the simulation.");
+    }
+
+    void DrawMainMenu(GUIStyle boxStyle, GUIStyle titleStyle)
+    {
+        // Fallback đen xám nguyên thủy (Bỏ ảnh nền theo ý đại ca)
+        GUI.Box(new Rect(0, 0, Screen.width, Screen.height), "", boxStyle);
+
+        float menuWidth = 400f;
+        float menuHeight = 250f;
+        float menuX = (Screen.width - menuWidth) / 2f;
+        float menuY = (Screen.height - menuHeight) / 2f;
+
+        GUILayout.BeginArea(new Rect(menuX, menuY, menuWidth, menuHeight));
+        GUI.Box(new Rect(0, 0, menuWidth, menuHeight), "", boxStyle);
+        
+        GUILayout.BeginVertical();
+        GUILayout.Space(20);
+        
+        GUIStyle mainTitleStyle = new GUIStyle(titleStyle)
+        {
+            fontSize = 24,
+            alignment = TextAnchor.MiddleCenter
+        };
+        GUILayout.Label("☀ SOLAR SYSTEM SIMULATION", mainTitleStyle);
+        
+        GUILayout.Space(30);
+
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 16,
+            fontStyle = FontStyle.Bold
+        };
+
+        GUI.backgroundColor = new Color(0.2f, 0.8f, 0.2f);
+        if (GUILayout.Button("▶ START GAME", buttonStyle, GUILayout.Height(50)))
+        {
+            isMainMenu = false;
+            // Tuân lệnh đại ca: Start game thì set speed về 15 day/s
+            if (settings != null)
+            {
+                settings.timeScale = 15f;
+            }
+        }
+        GUI.backgroundColor = Color.white;
+
+        GUILayout.Space(15);
+
+        GUI.backgroundColor = new Color(0.8f, 0.2f, 0.2f);
+        if (GUILayout.Button("❌ EXIT TO DESKTOP", buttonStyle, GUILayout.Height(50)))
+        {
+            #if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+            #else
+            Application.Quit();
+            #endif
+        }
+        GUI.backgroundColor = Color.white;
+
+        GUILayout.EndVertical();
+        GUILayout.EndArea();
     }
 }
 

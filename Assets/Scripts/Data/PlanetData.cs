@@ -255,5 +255,16 @@ public static class PlanetData
             }
         }
     }
+
+    /// <summary>
+    /// Khôi phục toàn bộ các thông số của hệ mặt trời về nguyên bản
+    /// </summary>
+    public static void ResetToDefaults()
+    {
+        AllBodies = new BodyInfo[]
+        {
+            Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune
+        };
+    }
 }
 

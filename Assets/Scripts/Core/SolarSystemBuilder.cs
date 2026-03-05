@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 /// <summary>
 /// Script khởi tạo toàn bộ Hệ Mặt Trời từ PlanetData.
@@ -44,16 +45,38 @@ public class SolarSystemBuilder : MonoBehaviour
     /// </summary>
     private void SetupBackground()
     {
-        // Camera background đen
         Camera cam = Camera.main;
-        if (cam != null)
-        {
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = Color.black;
-        }
 
-        // Tắt skybox → background = camera color = đen (vũ trụ)
-        RenderSettings.skybox = null;
+        // === THỬ LOAD SKYBOX TỪ RESOURCES ===
+        // Tìm texture panoramic trong Resources/cosmic_background
+        Texture2D skyTexture = Resources.Load<Texture2D>("cosmic_background");
+
+        if (skyTexture != null)
+        {
+            // Dùng Skybox/Panoramic shader (equirectangular 360°)
+            Material skyMat = new Material(Shader.Find("Skybox/Panoramic"));
+            skyMat.SetTexture("_MainTex", skyTexture);
+            skyMat.SetFloat("_Exposure", 0.4f); // Tối bớt để không lấn át hành tinh
+            RenderSettings.skybox = skyMat;
+
+            if (cam != null)
+            {
+                cam.clearFlags = CameraClearFlags.Skybox;
+            }
+
+            Debug.Log("[SolarSystemBuilder] Loaded cosmic skybox from Resources/cosmic_background");
+        }
+        else
+        {
+            // Fallback: background đen nếu chưa có texture
+            if (cam != null)
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = Color.black;
+            }
+            RenderSettings.skybox = null;
+            Debug.LogWarning("[SolarSystemBuilder] cosmic_background not found in Resources. Using black background.");
+        }
 
         // Ambient light rất tối — không gian vũ trụ
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
@@ -383,6 +406,9 @@ public class SolarSystemBuilder : MonoBehaviour
             body.initialVelocityV3 = velocityDir * speed;
 
             gravSim.AddDynamicBody(body);
+            
+            // Auto-destroy sau 5 giây để giải phóng hiệu năng
+            StartCoroutine(DestroyMeteorAfterDelay(body, 5f, gravSim));
         }
     }
 
@@ -444,6 +470,30 @@ public class SolarSystemBuilder : MonoBehaviour
             body.initialVelocityV3 = velocityDir * speed;
 
             gravSim.AddDynamicBody(body);
+            
+            // Auto-destroy sau 5 giây để giải phóng hiệu năng
+            StartCoroutine(DestroyMeteorAfterDelay(body, 5f, gravSim));
+        }
+    }
+
+    /// <summary>
+    /// Coroutine tự hủy thiên thạch sau delay giây.
+    /// Gỡ sạch khỏi mảng physics rồi Destroy GameObject.
+    /// </summary>
+    private IEnumerator DestroyMeteorAfterDelay(CelestialBody meteor, float delay, GravitySimulation gravSim)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (meteor != null && meteor.gameObject != null)
+        {
+            if (gravSim != null)
+            {
+                gravSim.RemoveBody(meteor);
+            }
+            else
+            {
+                Destroy(meteor.gameObject);
+            }
         }
     }
 }
