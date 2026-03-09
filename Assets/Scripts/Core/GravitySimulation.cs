@@ -262,6 +262,33 @@ public class GravitySimulation : MonoBehaviour
         // Update visual positions + trail
         DoubleVector3 sunPhysicsPos = sunBody != null ? sunBody.position : DoubleVector3.zero;
 
+        // Cập nhật góc quay (Orbit tracker)
+        for (int i = 0; i < bodyCount; i++)
+        {
+            CelestialBody body = bodies[i];
+            if (body == sunBody) continue;
+
+            // Tính mốc để đo vòng (relative to Parent nếu là mặt trăng, nếu không thì Mặt Trời)
+            DoubleVector3 referencePos = sunPhysicsPos;
+            if (body.orbitParent != null)
+            {
+                CelestialBody parentBody = body.orbitParent.GetComponent<CelestialBody>();
+                if (parentBody != null) referencePos = parentBody.position;
+            }
+
+            Vector3 currRelPos = (body.position - referencePos).ToVector3();
+            if (currRelPos.sqrMagnitude > 0.0001f)
+            {
+                if (body.previousRelativePosition != Vector3.zero)
+                {
+                    // Trục Y của Unity là trục Up, góc quay quanh trục Y trong mặt phẳng XZ
+                    float angle = Vector3.SignedAngle(body.previousRelativePosition, currRelPos, Vector3.up);
+                    body.totalOrbitAngle += angle;
+                }
+                body.previousRelativePosition = currRelPos;
+            }
+        }
+
         // === Sun phải update visual TRƯỚC để các hành tinh khác lấy sunVisualPos đúng ===
         // Sun visual position = physics position trực tiếp (không relative vì nó là gốc)
         if (sunBody != null)
@@ -528,6 +555,8 @@ public class GravitySimulation : MonoBehaviour
         {
             bodies[i].Initialize();
             bodies[i].ClearTrail();
+            bodies[i].totalOrbitAngle = 0;
+            bodies[i].previousRelativePosition = Vector3.zero;
         }
 
         // Recompute initial accelerations
@@ -573,7 +602,69 @@ public class GravitySimulation : MonoBehaviour
         newBody.Initialize();
         newBody.SetupTrail(settings);
         newBody.SetOrbitMaxPoints(CalcOrbitPoints(newBody));
+        newBody.totalOrbitAngle = 0;
+        newBody.previousRelativePosition = Vector3.zero;
+        
         Debug.Log($"[GravitySimulation] Dynamically injected {newBody.bodyName}. Total bodies: {bodyCount}");
+    }
+
+    // ==================== ORBIT COUNTER UI ====================
+    /// <summary>
+    /// Vẽ UI OnGUI để theo dõi số vòng các hành tinh đã quay
+    /// </summary>
+    void OnGUI()
+    {
+        if (!isInitialized || bodies == null || bodyCount == 0 || sunBody == null) return;
+
+        int activeOrbitCounter = 0;
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i] != sunBody && bodies[i].mass > 0) activeOrbitCounter++;
+        }
+
+        if (activeOrbitCounter == 0) return;
+
+        int width = 230;
+        int height = activeOrbitCounter * 22 + 45;
+        int x = Screen.width - width - 20;
+        int y = Screen.height - height - 20;
+
+        // Vẽ background đen mờ mờ cho UI
+        GUI.color = new Color(0, 0, 0, 0.7f);
+        GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+
+        GUIStyle titleStyle = new GUIStyle(GUI.skin.label);
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        titleStyle.fontStyle = FontStyle.Bold;
+        titleStyle.normal.textColor = new Color(1f, 0.8f, 0.2f);
+        
+        GUI.Label(new Rect(x, y + 5, width, 25), "🪐 SỐ VÒNG QUỸ ĐẠO", titleStyle);
+
+        GUIStyle itemStyle = new GUIStyle(GUI.skin.label);
+        itemStyle.alignment = TextAnchor.MiddleLeft;
+        itemStyle.fontStyle = FontStyle.Bold;
+
+        int currentY = y + 35;
+        for (int i = 0; i < bodyCount; i++)
+        {
+            CelestialBody body = bodies[i];
+            if (body == sunBody || body.mass <= 0) continue;
+
+            double orbits = System.Math.Abs(body.totalOrbitAngle / 360.0);
+            
+            Color c = body.orbitColor;
+            c.r = Mathf.Max(c.r, 0.4f);
+            c.g = Mathf.Max(c.g, 0.4f);
+            c.b = Mathf.Max(c.b, 0.4f);
+            c.a = 1f;
+            itemStyle.normal.textColor = c;
+
+            GUI.Label(new Rect(x + 15, currentY, width - 30, 20), 
+                $"{body.bodyName}: {orbits:F2} vòng", itemStyle);
+                
+            currentY += 22;
+        }
     }
 }
 

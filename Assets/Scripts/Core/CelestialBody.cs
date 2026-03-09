@@ -64,6 +64,10 @@ public class CelestialBody : MonoBehaviour
     // Visual state
     [HideInInspector] public float baseVisualScale = 1f;
 
+    // Orbit tracking state
+    [HideInInspector] public double totalOrbitAngle = 0;
+    [HideInInspector] public Vector3 previousRelativePosition = Vector3.zero;
+
     // ==================== TRAIL (LineRenderer custom) ====================
     private LineRenderer orbitLine;
 
