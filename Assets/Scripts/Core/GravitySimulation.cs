@@ -56,6 +56,13 @@ public class GravitySimulation : MonoBehaviour
 
     private SimulationCamera simCamera;
 
+    // ==================== DISTANCE MEASUREMENT ====================
+    // Nhấn M để bật chế độ đo → nhấn số chọn hành tinh A → nhấn số chọn B → in khoảng cách
+    private bool isMeasuringDistance = false;
+    private CelestialBody distancePlanetA = null;
+    private string[] planetNames = { "Sun", "Mercury", "Venus", "Earth", "Mars",
+                                     "Jupiter", "Saturn", "Uranus", "Neptune" };
+
     void Start()
     {
         simCamera = FindObjectOfType<SimulationCamera>();
@@ -147,6 +154,70 @@ public class GravitySimulation : MonoBehaviour
         }
     }
 
+
+    private void HandleDistanceMeasurement()
+    {
+        // Nhấn M để bật/tắt chế độ đo khoảng cách
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            isMeasuringDistance = !isMeasuringDistance;
+            distancePlanetA = null; // Reset lựa chọn
+
+            if (isMeasuringDistance)
+                Debug.Log("Chon 2 hanh tinh");
+            else
+                Debug.Log("tat do khoang cach");
+            return;
+        }
+
+        if (!isMeasuringDistance) return;
+
+        for (int i = 0; i < 9; i++)
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i))
+            {
+                CelestialBody found = FindBodyByName(planetNames[i]);
+                if (found == null)
+                {
+                    Debug.LogWarning($"ko tim thay: {planetNames[i]}");
+                    return;
+                }
+
+                if (distancePlanetA == null)
+                {
+                    distancePlanetA = found;
+                    Debug.Log($"Hanh tinh A:{found.bodyName}. Nhan so khac de chon hanh tinh.");
+                }
+                else
+                {
+                    CelestialBody planetB = found;
+
+                    double distAU = DoubleVector3.Distance(distancePlanetA.position, planetB.position);
+                    
+
+                    Debug.Log($"{distancePlanetA.bodyName} - {planetB.bodyName}: {distAU:F6} AU");
+
+                    distancePlanetA = null;
+                }
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tìm CelestialBody theo tên trong mảng bodies đang active.
+    /// </summary>
+    private CelestialBody FindBodyByName(string name)
+    {
+        if (bodies == null) return null;
+        for (int i = 0; i < bodyCount; i++)
+        {
+            if (bodies[i] != null && bodies[i].bodyName == name)
+                return bodies[i];
+        }
+        return null;
+    }
+
     // === FIX 1 & 2: Giới hạn dt tối đa mỗi sub-step để tránh energy drift và orbit thẳng ===
     // Giảm từ 0.5 xuống 0.05 để đảm bảo ở tốc độ rất cao (125), các hành tinh như Mercury
     // không bị nhảy bước quá lớn trong tích phân vật lý gây ra rung lắc quỹ đạo.
@@ -155,6 +226,9 @@ public class GravitySimulation : MonoBehaviour
     void Update()
     {
         if (!isInitialized || bodies == null || bodyCount == 0) return;
+
+        // === DISTANCE MEASUREMENT: Ctrl + số để đo khoảng cách ===
+        HandleDistanceMeasurement();
 
         // Tính dt cho mỗi bước (đồng bộ hoàn hảo với khung hình vẽ màn hình để xoá Stutter/Jitter)
         double totalDt = settings.timeScale * Time.deltaTime; // days per frame
@@ -370,31 +444,40 @@ public class GravitySimulation : MonoBehaviour
         double G = settings.gravitationalConstant * settings.gravityMultiplier;
         double softening = settings.softeningFactor;
 
-        // Reset accelerations
+        // code goc, neu chi mat troi tac dung luc len hanh tinh, tinh gia toc don gian:
+        // int sunIndex = 0;
+        // for (int i = 0; i < bodyCount; i++) { if (allBodies[i] == sunBody) { sunIndex = i; break; } }
+        // for (int i = 0; i < bodyCount; i++) newAccelerations[i] = DoubleVector3.zero;
+        // for (int i = 0; i < bodyCount; i++)
+        // {
+        //     if (i == sunIndex) continue; 
+        //     DoubleVector3 rij = allBodies[sunIndex].position - allBodies[i].position; 
+        //     double distSqr = rij.sqrMagnitude + softening;
+        //     double invDistCube = 1.0 / (distSqr * System.Math.Sqrt(distSqr));
+        //     
+        //     newAccelerations[i] = rij * (G * allBodies[sunIndex].mass * invDistCube);
+        // }
+
+        
+        //mới, các hành tinh tuong tac luc lan nhau
         for (int i = 0; i < bodyCount; i++)
         {
             newAccelerations[i] = DoubleVector3.zero;
         }
-
-        // Pairwise computation (Newton's 3rd Law optimization)
+        
         for (int i = 0; i < bodyCount; i++)
         {
             for (int j = i + 1; j < bodyCount; j++)
             {
-                // Vector từ body i đến body j
                 DoubleVector3 rij = allBodies[j].position - allBodies[i].position;
-
-                // Khoảng cách bình phương + softening
+        
                 double distSqr = rij.sqrMagnitude + softening;
-
-                // 1/r³ = 1/(r² × r) = 1/(r² × sqrt(r²))
+        
                 double invDistCube = 1.0 / (distSqr * System.Math.Sqrt(distSqr));
-
-                // Gia tốc = G × m × r⃗ / r³
-                // Body i bị kéo về phía j: a_i += G × m_j × rij / r³
-                // Body j bị kéo về phía i: a_j -= G × m_i × rij / r³ (Newton 3rd Law)
+        
+         
                 DoubleVector3 forceDirection = rij * invDistCube;
-
+        
                 newAccelerations[i] = newAccelerations[i] + forceDirection * (G * allBodies[j].mass);
                 newAccelerations[j] = newAccelerations[j] - forceDirection * (G * allBodies[i].mass);
             }
@@ -490,7 +573,6 @@ public class GravitySimulation : MonoBehaviour
         newBody.Initialize();
         newBody.SetupTrail(settings);
         newBody.SetOrbitMaxPoints(CalcOrbitPoints(newBody));
-        
         Debug.Log($"[GravitySimulation] Dynamically injected {newBody.bodyName}. Total bodies: {bodyCount}");
     }
 }

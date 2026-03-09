@@ -156,7 +156,7 @@ public class SimulationUI : MonoBehaviour
             GUILayout.Space(20);
             GUILayout.Label("Controls:", boldLabel);
             GUIStyle controlStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
-            GUILayout.Label("• Scroll: Zoom In/Out\n• Right Click + Drag: Rotate Camera\n• Left Click / Number 1-9: Select Planet\n• Space: Reset Camera View\n• R: Reset Simulation (Reset positions to default)\n• H: Toggle UI Visibility", controlStyle);
+            GUILayout.Label("• Scroll: Zoom In/Out\n• Right Click + Drag: Rotate Camera\n• Left Click / Number 1-9: Select Planet\n• Ctrl + Number + Number: Measure Distance\n• Space: Reset Camera View\n• R: Reset Simulation (Reset positions to default)\n• H: Toggle UI Visibility", controlStyle);
         }
         GUILayout.EndArea();
 
